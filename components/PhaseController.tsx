@@ -187,7 +187,7 @@ export function PhaseController() {
 
     return {
       title: "记录中",
-      text: "正在同步今日数据...",
+      text: "请滑动下侧图标确认今日的能量状态。",
       bg: "bg-slate-50 text-slate-600 border-slate-200"
     };
   };
