@@ -4,8 +4,33 @@ import { useEffect, useMemo, useState } from "react";
 import { getCurrentPhase, getTodayKey, getTodayLog, useGoalStore } from "@/lib/store";
 
 const BASE_TASK = 4;
+const MAX_TASK = 6;
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+const calculateRecommended = (energy: number) => {
+  if (energy < 50) {
+    const ratio = energy / 50;
+    return BASE_TASK * Math.pow(ratio, 2.5);
+  }
+
+  if (energy < 80) {
+    const ratio = (energy - 50) / 30;
+    return BASE_TASK + Math.pow(ratio, 0.6);
+  }
+
+  const ratio = (energy - 80) / 20;
+  return 5 + ratio;
+};
+
+const getToleranceThreshold = (energy: number) => {
+  if (energy >= 50) {
+    return 0.95;
+  }
+
+  return 0.95 - ((50 - energy) / 50) * 0.45;
+};
 
 export function PhaseController() {
   const activeGoal = useGoalStore((state) => state.activeGoal);
@@ -43,12 +68,14 @@ export function PhaseController() {
     setActualDone(value);
   };
 
-  const recommendedTask = BASE_TASK * (energy / 100 + 0.3);
-  const clampedRec = clamp(recommendedTask, 1, 6);
+  const recommendedTask = calculateRecommended(energy);
+  const clampedRec = clamp(recommendedTask, 0.1, MAX_TASK);
 
-  const outputPercent = clamp((actualDone / 6) * 100, 0, 100);
-  const recLinePercent = clamp((clampedRec / 6) * 100, 0, 100);
+  const outputPercent = clamp((actualDone / MAX_TASK) * 100, 0, 100);
+  const recLinePercent = clamp((clampedRec / MAX_TASK) * 100, 0, 100);
+  const toleranceRatio = getToleranceThreshold(energy);
 
+  const isResilient = energy < 50 && actualDone >= clampedRec * toleranceRatio;
   const isMaxed = energy >= 100 && outputPercent >= 100;
   const isGolden = !isMaxed && energy > 80 && actualDone >= clampedRec;
 
@@ -93,27 +120,41 @@ export function PhaseController() {
       };
     }
 
-    const performanceRatio = clampedRec === 0 ? 0 : (actualDone / clampedRec) * 100;
+    if (isResilient) {
+      return {
+        title: "韧性生长",
+        text: "你把状态拉回来了。在低谷期能做到这样，比满分更珍贵。",
+        bg: "bg-purple-50 text-purple-900 border-purple-200"
+      };
+    }
 
-    if (energy < 40 && performanceRatio < 60) {
+    if (energy < 50 && !isResilient) {
       return {
         title: "允许低谷",
-        text: "今天确实不容易，允许自己休息一下。",
+        text: "今天确实不容易。系统已自动降低负荷，好好休息。",
         bg: "bg-slate-50 text-slate-600 border-slate-200"
       };
     }
 
-    if (energy > 60 && performanceRatio < 50) {
+    if (energy >= 50 && actualDone >= clampedRec) {
       return {
-        title: "需要行动",
-        text: "你有能量，试着把它们转化成行动吧。",
+        title: "稳定积累",
+        text: "保持这种节奏。水滴石穿的力量，往往是无声的。",
         bg: "bg-blue-50 text-blue-900 border-blue-200"
       };
     }
 
+    if (energy >= 50 && actualDone < clampedRec) {
+      return {
+        title: "接纳波动",
+        text: "能量充足但产出未满？没关系，接受波动也是一种能力。",
+        bg: "bg-orange-50 text-orange-900 border-orange-200"
+      };
+    }
+
     return {
-      title: "今日小结",
-      text: "数据已记录。无论怎样，今天过去了。",
+      title: "今日记录",
+      text: "数据已记录。",
       bg: "bg-slate-50 text-slate-600 border-slate-200"
     };
   };
@@ -228,7 +269,7 @@ export function PhaseController() {
             <input
               type="range"
               min="0"
-              max="6"
+              max={MAX_TASK}
               step="0.5"
               value={actualDone}
               onChange={(event) => handleSliderChange("output", Number(event.target.value))}
