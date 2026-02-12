@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PhaseController from "@/components/PhaseController";
 import { getDaysActive, useGoalStore } from "@/lib/store";
 
@@ -8,20 +8,26 @@ export default function HomePage() {
   const hasHydrated = useGoalStore((state) => state.hasHydrated);
   const activeGoal = useGoalStore((state) => state.activeGoal);
   const createGoal = useGoalStore((state) => state.createGoal);
+  const updateGoal = useGoalStore((state) => state.updateGoal);
 
   const [goalInput, setGoalInput] = useState("");
   const [daysInput, setDaysInput] = useState("");
   const [createError, setCreateError] = useState("");
-
-  const handleReset = () => {
-    if (window.confirm("【开发调试】确定要清除数据，回到初始状态吗？")) {
-      localStorage.clear();
-      window.location.reload();
-    }
-  };
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDays, setEditDays] = useState("");
 
   const themeClass =
     "bg-[#F5F5F7] text-slate-900 font-mono antialiased selection:bg-blue-100 selection:text-blue-900";
+
+  useEffect(() => {
+    if (!activeGoal) {
+      return;
+    }
+
+    setEditTitle(activeGoal.title);
+    setEditDays(String(activeGoal.totalDays || 21));
+  }, [activeGoal]);
 
   if (!hasHydrated) {
     return (
@@ -98,35 +104,90 @@ export default function HomePage() {
 
   return (
     <main className={`min-h-screen flex items-center justify-center p-4 ${themeClass} relative`}>
-      <button
-        onClick={handleReset}
-        className="fixed bottom-4 right-4 text-[10px] text-slate-300 hover:text-red-500 transition-colors uppercase font-bold z-50 cursor-pointer"
-        type="button"
-      >
-        [ Reset ]
-      </button>
-
       <div className="w-full max-w-md bg-white rounded-[44px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.08)] overflow-hidden border border-white/60 relative">
-        <header className="flex justify-between items-center p-8 pb-2 bg-white/80 backdrop-blur-xl z-10 sticky top-0">
-          <div className="space-y-1 min-w-0">
-            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-              你的目标
+        <header className="sticky top-0 z-10 flex items-start justify-between bg-white/80 p-8 pb-4 backdrop-blur-xl">
+          <div className="mr-4 flex-1 space-y-1 min-w-0">
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                你的目标
+              </span>
+              {!isEditing ? (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="text-[10px] font-bold text-blue-400 transition-colors hover:text-blue-600"
+                  type="button"
+                >
+                  [ 修改 ]
+                </button>
+              ) : null}
             </div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight truncate">
-              {activeGoal.title}
-            </h1>
+
+            {isEditing ? (
+              <div className="space-y-2 pt-1">
+                <input
+                  value={editTitle}
+                  onChange={(event) => setEditTitle(event.target.value)}
+                  className="w-full rounded-xl border-none bg-slate-50 px-3 py-2 text-lg font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font-bold uppercase text-slate-400">总天数:</span>
+                  <input
+                    type="number"
+                    value={editDays}
+                    onChange={(event) => setEditDays(event.target.value)}
+                    className="w-16 rounded-md border-none bg-slate-50 px-2 py-1 text-sm font-bold outline-none"
+                  />
+                </div>
+              </div>
+            ) : (
+              <h1 className="truncate text-xl font-bold tracking-tight text-slate-900">
+                {activeGoal.title}
+              </h1>
+            )}
           </div>
-          <div className="flex flex-col items-end">
+
+          <div className="shrink-0 flex flex-col items-end">
             <span className="text-[10px] text-slate-400 font-bold uppercase">当前进度</span>
             <div className="flex items-baseline space-x-1">
               <span className="text-2xl font-bold text-slate-800 leading-none">{daysActive}</span>
-              <span className="text-sm font-bold text-slate-300">/ {totalDays}</span>
+              <span className="text-sm font-bold text-slate-300">/ {activeGoal.totalDays || totalDays}</span>
             </div>
           </div>
         </header>
 
         <div className="px-6 pb-8">
-          <PhaseController />
+          {isEditing ? (
+            <div className="space-y-3 pt-6">
+              <button
+                onClick={() => {
+                  const normalizedTitle = editTitle.trim() || activeGoal.title;
+                  const normalizedDays = Math.max(
+                    1,
+                    Number.parseInt(editDays, 10) || activeGoal.totalDays || 21
+                  );
+                  updateGoal(normalizedTitle, normalizedDays);
+                  setIsEditing(false);
+                }}
+                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-[0_6px_0_#0f172a] active:translate-y-1 active:shadow-none transition-all"
+                type="button"
+              >
+                保存修改
+              </button>
+              <button
+                onClick={() => {
+                  setEditTitle(activeGoal.title);
+                  setEditDays(String(activeGoal.totalDays || 21));
+                  setIsEditing(false);
+                }}
+                className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-all"
+                type="button"
+              >
+                取消
+              </button>
+            </div>
+          ) : (
+            <PhaseController />
+          )}
         </div>
       </div>
     </main>

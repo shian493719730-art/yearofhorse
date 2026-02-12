@@ -40,6 +40,7 @@ type GoalStore = {
   stabilityScore: number;
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
+  updateGoal: (title: string, totalDays: number) => void;
   createGoal: (
     input: CreateGoalInput | string,
     totalDays?: number
@@ -309,6 +310,18 @@ export const useGoalStore = create<GoalStore>()(
       stabilityScore: 0,
       hasHydrated: false,
       setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
+      updateGoal: (title, totalDays) => {
+        const trimmedTitle = title.trim();
+        set((state) => ({
+          activeGoal: state.activeGoal
+            ? {
+                ...state.activeGoal,
+                title: trimmedTitle || state.activeGoal.title,
+                totalDays: normalizeTotalDays(totalDays)
+              }
+            : null
+        }));
+      },
       createGoal: (input, totalDays) => {
         const payload =
           typeof input === "string"
