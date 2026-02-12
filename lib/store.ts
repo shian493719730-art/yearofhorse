@@ -11,12 +11,6 @@ export type DailyLog = {
   actualDone: number;
 };
 
-export type DailyRecord = {
-  date: string;
-  energy: number;
-  progress: number;
-};
-
 export type DayPhase = DailyLog["phase"];
 
 type GoalStatus = "active" | "completed" | "abandoned";
@@ -43,12 +37,9 @@ type DailyLogInput = Omit<DailyLog, "date"> & {
 type GoalStore = {
   activeGoal: Goal | null;
   archivedGoals: Goal[];
-  records: DailyRecord[];
   stabilityScore: number;
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
-  setGoal: (title: string, days: number) => void;
-  addRecord: (energy: number, progress: number) => void;
   createGoal: (
     input: CreateGoalInput | string,
     totalDays?: number
@@ -60,10 +51,8 @@ type GoalStore = {
 };
 
 const STORE_KEY = "yearofhorse-store";
-const STORE_VERSION = 4;
+const STORE_VERSION = 3;
 const DEFAULT_TOTAL_DAYS = 21;
-const DEFAULT_BASE_TARGET = 4;
-const MAX_PROGRESS_HOURS = 6;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -78,15 +67,6 @@ const normalizeTotalDays = (value: unknown) => {
   }
 
   return Math.max(1, Math.floor(parsed));
-};
-
-const normalizeProgress = (value: unknown) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-
-  return clamp(parsed, 0, 100);
 };
 
 export const getTodayKey = () => {
@@ -178,18 +158,6 @@ export const calculateGoalCompletion = (goal: Goal) => {
   return Number(clamp(averageCompletion, 0, 100).toFixed(2));
 };
 
-const toProgressPercent = (log: DailyLog) =>
-  clamp(calculateProgress(log.energyLevel, log.actualDone, log.baseTarget), 0, 100);
-
-const toProgressHours = (progress: number) =>
-  Number(((clamp(progress, 0, 100) / 100) * MAX_PROGRESS_HOURS).toFixed(2));
-
-const toDailyRecord = (log: DailyLog): DailyRecord => ({
-  date: log.date,
-  energy: clamp(log.energyLevel, 0, 100),
-  progress: Number(toProgressPercent(log).toFixed(2))
-});
-
 export const calculateStability = (logs: DailyLog[]) => {
   if (logs.length === 0) {
     return 0;
@@ -261,19 +229,6 @@ const upsertDailyLog = (history: DailyLog[], incoming: DailyLog) => {
   return nextHistory.sort((a, b) => a.date.localeCompare(b.date));
 };
 
-const upsertDailyRecord = (records: DailyRecord[], incoming: DailyRecord) => {
-  const nextRecords = [...records];
-  const index = nextRecords.findIndex((item) => item.date === incoming.date);
-
-  if (index >= 0) {
-    nextRecords[index] = incoming;
-  } else {
-    nextRecords.push(incoming);
-  }
-
-  return nextRecords.sort((a, b) => a.date.localeCompare(b.date));
-};
-
 const createId = () =>
   (typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -319,28 +274,6 @@ const normalizeLog = (raw: unknown): DailyLog | null => {
   };
 };
 
-const normalizeRecord = (raw: unknown): DailyRecord | null => {
-  if (!isRecord(raw)) {
-    return null;
-  }
-
-  return {
-    date: typeof raw.date === "string" ? raw.date : getTodayKey(),
-    energy: clamp(Number(raw.energy) || 0, 0, 100),
-    progress: normalizeProgress(raw.progress)
-  };
-};
-
-const deriveRecordsFromGoal = (goal: Goal | null) => {
-  if (!goal) {
-    return [];
-  }
-
-  return goal.history.reduce<DailyRecord[]>((records, log) => {
-    return upsertDailyRecord(records, toDailyRecord(log));
-  }, []);
-};
-
 const normalizeGoal = (raw: unknown): Goal | null => {
   if (!isRecord(raw)) {
     return null;
@@ -373,66 +306,9 @@ export const useGoalStore = create<GoalStore>()(
     (set, get) => ({
       activeGoal: null,
       archivedGoals: [],
-      records: [],
       stabilityScore: 0,
       hasHydrated: false,
       setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
-      setGoal: (title, days) => {
-        const trimmedTitle = title.trim();
-        if (!trimmedTitle) {
-          return;
-        }
-
-        const nextGoal: Goal = {
-          id: createId(),
-          title: trimmedTitle,
-          startDate: getTodayKey(),
-          totalDays: normalizeTotalDays(days),
-          history: [],
-          status: "active"
-        };
-
-        set({
-          activeGoal: nextGoal,
-          records: [],
-          stabilityScore: 0
-        });
-      },
-      addRecord: (energy, progress) => {
-        const date = getTodayKey();
-        const safeEnergy = clamp(energy, 0, 100);
-        const safeProgress = normalizeProgress(progress);
-        const nextRecords = upsertDailyRecord(get().records, {
-          date,
-          energy: safeEnergy,
-          progress: Number(safeProgress.toFixed(2))
-        });
-
-        const currentGoal = get().activeGoal;
-        if (!currentGoal) {
-          set({ records: nextRecords });
-          return;
-        }
-
-        const settlementLog: DailyLog = {
-          date,
-          phase: "evening",
-          energyLevel: safeEnergy,
-          baseTarget: DEFAULT_BASE_TARGET,
-          actualDone: toProgressHours(safeProgress)
-        };
-
-        const updatedGoal: Goal = {
-          ...currentGoal,
-          history: upsertDailyLog(currentGoal.history, settlementLog)
-        };
-
-        set({
-          activeGoal: updatedGoal,
-          records: nextRecords,
-          stabilityScore: calculateStability(updatedGoal.history)
-        });
-      },
       createGoal: (input, totalDays) => {
         const payload =
           typeof input === "string"
@@ -461,7 +337,7 @@ export const useGoalStore = create<GoalStore>()(
           status: "active"
         };
 
-        set({ activeGoal: goal, records: [], stabilityScore: 0 });
+        set({ activeGoal: goal, stabilityScore: 0 });
         return { ok: true };
       },
       addDailyLog: (input) => {
@@ -484,22 +360,20 @@ export const useGoalStore = create<GoalStore>()(
         };
 
         const nextStability = calculateStability(updatedGoal.history);
-        const nextRecords = upsertDailyRecord(get().records, toDailyRecord(log));
-        set({ activeGoal: updatedGoal, records: nextRecords, stabilityScore: nextStability });
+        set({ activeGoal: updatedGoal, stabilityScore: nextStability });
       },
       completeActiveGoal: () => {
         const { activeGoal, archivedGoals } = get();
-        set({ ...moveToArchive(activeGoal, "completed", archivedGoals), records: [] });
+        set(moveToArchive(activeGoal, "completed", archivedGoals));
       },
       abandonActiveGoal: () => {
         const { activeGoal, archivedGoals } = get();
-        set({ ...moveToArchive(activeGoal, "abandoned", archivedGoals), records: [] });
+        set(moveToArchive(activeGoal, "abandoned", archivedGoals));
       },
       clearStore: () => {
         set({
           activeGoal: null,
           archivedGoals: [],
-          records: [],
           stabilityScore: 0
         });
       }
@@ -522,23 +396,16 @@ export const useGoalStore = create<GoalStore>()(
         const stabilityScore = Number.isFinite(rawStability)
           ? clamp(rawStability, 0, 100)
           : calculateStability(activeGoal?.history ?? []);
-        const records = Array.isArray(state.records)
-          ? state.records
-              .map((record) => normalizeRecord(record))
-              .filter((record): record is DailyRecord => record !== null)
-          : deriveRecordsFromGoal(activeGoal);
 
         return {
           activeGoal,
           archivedGoals,
-          records,
           stabilityScore
         };
       },
       partialize: (state) => ({
         activeGoal: state.activeGoal,
         archivedGoals: state.archivedGoals,
-        records: state.records,
         stabilityScore: state.stabilityScore
       }),
       onRehydrateStorage: () => (state) => {
