@@ -1,74 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import PhaseController from "@/components/PhaseController";
-import { calculateStability, getDaysActive, useGoalStore } from "@/lib/store";
+import { getDaysActive, useGoalStore } from "@/lib/store";
 
 export default function HomePage() {
   const hasHydrated = useGoalStore((state) => state.hasHydrated);
   const activeGoal = useGoalStore((state) => state.activeGoal);
   const createGoal = useGoalStore((state) => state.createGoal);
-  const clearStore = useGoalStore((state) => state.clearStore);
 
   const [goalInput, setGoalInput] = useState("");
-  const [hour, setHour] = useState(0);
   const [createError, setCreateError] = useState("");
 
-  useEffect(() => {
-    setHour(new Date().getHours());
-    const timer = window.setInterval(() => setHour(new Date().getHours()), 60000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  const themeClass = useMemo(() => {
-    if (hour >= 5 && hour < 11) {
-      return "bg-slate-50 text-slate-900";
-    }
-
-    if (hour >= 11 && hour < 18) {
-      return "bg-slate-200 text-slate-800";
-    }
-
-    return "bg-slate-950 text-slate-100";
-  }, [hour]);
+  const themeClass =
+    "bg-[#F2F2F7] text-slate-900 font-mono antialiased selection:bg-blue-100 selection:text-blue-900";
 
   if (!hasHydrated) {
     return (
-      <main
-        className={`flex min-h-screen items-center justify-center p-6 font-mono transition-colors duration-500 ${themeClass}`}
-      >
-        <p className="text-sm opacity-70">正在同步今天的数据...</p>
+      <main className={`min-h-screen flex items-center justify-center p-6 ${themeClass}`}>
+        <p className="text-sm text-slate-400">正在加载...</p>
       </main>
     );
   }
 
   if (!activeGoal) {
     return (
-      <main
-        className={`flex min-h-screen items-center justify-center p-6 font-mono transition-colors duration-500 ${themeClass}`}
-      >
-        <div className="w-full max-w-md space-y-8 text-center">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">开启新目标</h1>
-            <p className="opacity-80">设定一个你想长期坚持的目标。</p>
+      <main className={`min-h-screen flex flex-col items-center justify-center p-6 ${themeClass}`}>
+        <div className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] space-y-8 transition-all hover:scale-[1.01] duration-500 ease-out">
+          <div className="space-y-3 text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">开启新旅程</h1>
+            <p className="text-sm text-slate-400 font-medium">设定一个你想长期坚持的目标</p>
           </div>
 
-          <div className="space-y-4 rounded-2xl border border-current/10 bg-white/10 p-6 text-left backdrop-blur-sm">
-            <div className="space-y-2">
-              <label className="text-sm font-bold opacity-70">我想坚持...</label>
+          <div className="space-y-6">
+            <div className="space-y-2 group">
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1 group-focus-within:text-blue-500 transition-colors">
+                你的目标
+              </label>
               <input
-                className="w-full border-b-2 border-current/30 bg-transparent p-2 text-lg transition-all focus:border-current focus:outline-none"
-                onChange={(event) => setGoalInput(event.target.value)}
-                placeholder="例如：每天写点东西..."
                 type="text"
                 value={goalInput}
+                onChange={(event) => setGoalInput(event.target.value)}
+                placeholder="例如：每天阅读..."
+                className="w-full bg-slate-50 border-none p-5 rounded-2xl focus:ring-2 focus:ring-blue-500/20 text-lg placeholder-slate-300 transition-all font-medium text-center"
               />
             </div>
 
-            {createError ? <p className="text-xs text-red-400">{createError}</p> : null}
+            {createError ? <p className="text-xs text-red-500 text-center">{createError}</p> : null}
 
             <button
-              className="w-full rounded-xl border border-current/20 bg-current/10 py-4 font-bold transition-all hover:bg-current/20"
               onClick={() => {
                 const title = goalInput.trim();
                 if (!title) {
@@ -76,8 +56,9 @@ export default function HomePage() {
                 }
 
                 const result = createGoal({ title });
-                setCreateError(result.ok ? "" : result.reason ?? "创建失败，请重试。");
+                setCreateError(result.ok ? "" : result.reason ?? "创建失败，请稍后重试");
               }}
+              className="w-full py-5 bg-slate-900 text-white hover:bg-black rounded-2xl font-bold tracking-wide transition-all shadow-lg shadow-slate-900/20 active:scale-95 text-sm"
               type="button"
             >
               开始记录
@@ -88,63 +69,28 @@ export default function HomePage() {
     );
   }
 
-  const logs = activeGoal.history;
-  const stability = calculateStability(logs);
-  const totalFocusTime = logs.reduce((sum, log) => sum + (log.actualDone || 0), 0);
   const daysActive = getDaysActive(activeGoal.startDate);
 
-  let statusText = "刚刚开始";
-  if (logs.length > 0) {
-    if (stability >= 80) {
-      statusText = "状态很棒";
-    } else if (stability >= 50) {
-      statusText = "稳步前行";
-    } else {
-      statusText = "需要调整";
-    }
-  }
-
   return (
-    <main
-      className={`flex min-h-screen items-center justify-center p-4 font-mono transition-colors duration-500 ${themeClass}`}
-    >
-      <div className="w-full max-w-md space-y-6">
-        <header className="flex items-end justify-between border-b-2 border-current/10 pb-4">
-          <div>
-            <p className="mb-1 text-xs font-bold opacity-50">当前目标</p>
-            <h1 className="max-w-[220px] truncate text-xl font-bold">{activeGoal.title}</h1>
+    <main className={`min-h-screen flex items-center justify-center p-4 ${themeClass}`}>
+      <div className="w-full max-w-md bg-white rounded-[40px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] overflow-hidden border border-white/50 relative">
+        <header className="flex justify-between items-center p-8 pb-4 bg-white/80 backdrop-blur-xl z-10 sticky top-0">
+          <div className="space-y-1 min-w-0">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+              Current Goal
+            </div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight truncate">
+              {activeGoal.title}
+            </h1>
           </div>
-          <div className="text-right">
-            <p className="mb-1 text-xs font-bold opacity-50">坚持天数</p>
-            <p className="text-xl font-bold">{daysActive} 天</p>
+          <div className="text-right bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
+            <span className="text-[10px] text-slate-400 font-bold uppercase mr-2">Day</span>
+            <span className="text-xl font-bold text-slate-800">{daysActive}</span>
           </div>
         </header>
 
-        <PhaseController />
-
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="rounded-2xl border border-current/10 bg-current/5 p-4">
-            <p className="mb-1 text-xs opacity-60">专注时长</p>
-            <p className="text-2xl font-bold">
-              {totalFocusTime.toFixed(1)} <span className="text-sm opacity-50">小时</span>
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-current/10 bg-current/5 p-4">
-            <p className="mb-1 text-xs opacity-60">今日状态</p>
-            <p className="truncate text-xl font-bold">{Math.round(stability)} 分</p>
-            <p className="truncate text-xs opacity-50">{statusText}</p>
-          </div>
-        </div>
-
-        <div className="pt-2 text-right">
-          <button
-            className="rounded-xl border border-current/20 bg-current/10 px-3 py-2 text-xs font-bold transition-all hover:bg-current/20"
-            onClick={clearStore}
-            type="button"
-          >
-            重新开始
-          </button>
+        <div className="px-8 pb-8">
+          <PhaseController />
         </div>
       </div>
     </main>
