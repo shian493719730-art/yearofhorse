@@ -109,13 +109,15 @@ export default function HomePage() {
       <div className="w-full max-w-md bg-white rounded-[44px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.08)] overflow-hidden border border-white/60 relative">
         <header className="flex justify-between items-center p-8 pb-2 bg-white/80 backdrop-blur-xl z-10 sticky top-0">
           <div className="space-y-1 min-w-0">
-            <div className="text-[10px] text-slate-400 font-bold tracking-widest">你的目标</div>
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+              Current Goal
+            </div>
             <h1 className="text-xl font-bold text-slate-900 tracking-tight truncate">
               {activeGoal.title}
             </h1>
           </div>
           <div className="flex flex-col items-end">
-            <span className="text-[10px] text-slate-400 font-bold tracking-widest">当前进度</span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase">Progress</span>
             <div className="flex items-baseline space-x-1">
               <span className="text-2xl font-bold text-slate-800 leading-none">{daysActive}</span>
               <span className="text-sm font-bold text-slate-300">/ {totalDays}</span>
