@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { Press_Start_2P } from "next/font/google";
+import { Space_Mono } from "next/font/google";
 import "./globals.css";
 
-const pressStart2P = Press_Start_2P({
+const spaceMono = Space_Mono({
   subsets: ["latin"],
   weight: "400",
-  variable: "--font-pixel"
+  variable: "--font-mono"
 });
 
 export const metadata: Metadata = {
-  title: "YearOfHorse",
-  description: "Single-goal pixel-style habit builder."
+  title: "Data-Driven Dashboard",
+  description: "21-day single-goal tracking with adaptive energy logic."
 };
 
 export default function RootLayout({
@@ -19,10 +19,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="en">
       <body
-        className={`${pressStart2P.variable} antialiased`}
-        style={{ fontFamily: "var(--font-pixel), monospace" }}
+        className={`${spaceMono.variable} antialiased`}
+        style={{ fontFamily: "var(--font-mono), monospace" }}
       >
         {children}
       </body>

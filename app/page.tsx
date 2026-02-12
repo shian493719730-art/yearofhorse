@@ -1,59 +1,95 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PhaseController from "@/components/PhaseController";
-import PixelHorse from "@/components/PixelHorse";
 import {
   calculateGoalCompletion,
   getCurrentPhase,
+  getDaysActive,
   getTodayKey,
   getTodayLog,
   type DayPhase,
   useGoalStore
 } from "@/lib/store";
 
-const phaseBackground: Record<DayPhase, string> = {
-  morning: "from-[#f7ef9f] via-[#c8f3a8] to-[#92e59d]",
-  afternoon: "from-[#a5e2ff] via-[#7ec8ff] to-[#4f9dff]",
-  evening: "from-[#222b74] via-[#171d4f] to-[#0a0f2d]",
-  completed: "from-[#1a225e] via-[#101640] to-[#060a1f]"
+type ConsoleTheme = "morning" | "afternoon" | "night";
+
+const getThemeFromHour = (hour: number): ConsoleTheme => {
+  if (hour >= 5 && hour < 12) {
+    return "morning";
+  }
+
+  if (hour >= 12 && hour < 18) {
+    return "afternoon";
+  }
+
+  return "night";
 };
 
-const phaseName: Record<DayPhase, string> = {
-  morning: "早安，我的小马",
-  afternoon: "不要太累哦",
-  evening: "回家休息吧",
-  completed: "你长大了"
+const getLocalTheme = () => getThemeFromHour(new Date().getHours());
+
+const workflowLabels: Record<DayPhase, string> = {
+  morning: "Morning Calibration",
+  afternoon: "Afternoon Throughput",
+  evening: "Evening Consolidation",
+  completed: "Cycle Complete"
 };
 
-const neobrutalButton =
-  "rounded-none border-4 border-black bg-[#f8d248] px-4 py-3 text-[11px] text-black shadow-[4px_4px_0_#000] transition-transform active:translate-y-[2px] active:shadow-[2px_2px_0_#000]";
-
-const getGoalDay = (startDate: string, daysRequired: number) => {
-  const start = new Date(`${startDate}T00:00:00`);
-  const today = new Date(`${getTodayKey()}T00:00:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(today.getTime())) {
-    return 1;
+const getStabilityInterpretation = (score: number) => {
+  if (score > 80) {
+    return "Optimal / Stable";
   }
 
-  const diffDays = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1;
-  return Math.min(Math.max(diffDays, 1), Math.max(daysRequired, 1));
+  if (score >= 50) {
+    return "Dynamic / Fluctuating";
+  }
+
+  return "Entropy Increasing / Critical";
 };
 
-const getEvolutionStage = (completion: number) => {
-  if (completion >= 90) {
-    return 3;
+const themeTokens: Record<
+  ConsoleTheme,
+  {
+    label: string;
+    page: string;
+    text: string;
+    panel: string;
+    border: string;
+    muted: string;
+    input: string;
+    button: string;
   }
-
-  if (completion >= 65) {
-    return 2;
+> = {
+  morning: {
+    label: "Morning",
+    page: "bg-slate-50",
+    text: "text-slate-900",
+    panel: "bg-white/75",
+    border: "border-slate-200",
+    muted: "text-slate-600",
+    input: "bg-white border-slate-300 text-slate-900",
+    button: "bg-slate-900 text-white hover:bg-slate-700"
+  },
+  afternoon: {
+    label: "Afternoon",
+    page: "bg-slate-200",
+    text: "text-slate-900",
+    panel: "bg-slate-100/80",
+    border: "border-slate-300",
+    muted: "text-slate-700",
+    input: "bg-white border-slate-400 text-slate-900",
+    button: "bg-slate-900 text-white hover:bg-slate-700"
+  },
+  night: {
+    label: "Night",
+    page: "bg-slate-950",
+    text: "text-slate-100",
+    panel: "bg-slate-900/80",
+    border: "border-slate-700",
+    muted: "text-slate-400",
+    input: "bg-slate-950 border-slate-600 text-slate-100",
+    button: "bg-slate-100 text-slate-900 hover:bg-slate-300"
   }
-
-  if (completion >= 35) {
-    return 1;
-  }
-
-  return 0;
 };
 
 export default function HomePage() {
@@ -62,63 +98,75 @@ export default function HomePage() {
   const createGoal = useGoalStore((state) => state.createGoal);
   const addDailyLog = useGoalStore((state) => state.addDailyLog);
   const clearStore = useGoalStore((state) => state.clearStore);
+  const stabilityScore = useGoalStore((state) => state.stabilityScore);
 
-  const [goalTitle, setGoalTitle] = useState("30分钟专注训练");
-  const [daysRequired, setDaysRequired] = useState(21);
+  const [goalTitle, setGoalTitle] = useState("Deep Work System");
   const [createError, setCreateError] = useState("");
+  const [themeKey, setThemeKey] = useState<ConsoleTheme>(getLocalTheme());
+  const [clockTick, setClockTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const tick = () => {
+      setThemeKey(getLocalTheme());
+      setClockTick(Date.now());
+    };
+
+    tick();
+    const interval = window.setInterval(tick, 60000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const theme = themeTokens[themeKey];
 
   const handleCreateGoal = () => {
-    const result = createGoal({
-      title: goalTitle,
-      daysRequired
-    });
-    setCreateError(result.ok ? "" : result.reason ?? "创建目标失败");
+    const result = createGoal({ title: goalTitle });
+    setCreateError(result.ok ? "" : result.reason ?? "Unable to create goal.");
   };
 
   if (!hasHydrated) {
-    return <main className="p-8 text-sm">正在轻轻整理今天的记忆...</main>;
+    return (
+      <main
+        className={`min-h-screen px-4 py-8 transition-colors duration-500 ${theme.page} ${theme.text}`}
+      >
+        <p className="text-sm">Syncing Digital Lab Console data...</p>
+      </main>
+    );
   }
 
   if (!activeGoal) {
     return (
-      <main className="min-h-screen bg-gradient-to-b from-[#f7ef9f] via-[#c8f3a8] to-[#92e59d] px-4 py-8 transition-colors duration-700">
-        <div className="mx-auto mt-20 w-full max-w-xl rounded-none border-4 border-black bg-[#fff8df] p-6 shadow-[10px_10px_0_#000]">
-          <h1 className="text-[13px] leading-relaxed text-black">小马成长记</h1>
-          <p className="mt-2 text-[10px] leading-relaxed text-black">
-            先许下一个小心愿，马妈妈会一直陪你慢慢跑。
+      <main
+        className={`min-h-screen px-4 py-8 transition-colors duration-500 ${theme.page} ${theme.text}`}
+      >
+        <div
+          className={`mx-auto w-full max-w-2xl rounded-3xl border p-6 shadow-sm backdrop-blur transition-colors duration-500 ${theme.panel} ${theme.border}`}
+        >
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Digital Lab Console</p>
+          <h1 className="mt-3 text-2xl font-semibold">Initialize Long-term Goal Manager</h1>
+          <p className={`mt-2 text-sm ${theme.muted}`}>
+            Configure one perpetual goal to drive daily Energy and Progress tracking.
           </p>
 
-          <div className="mt-5 space-y-4">
-            <div>
-              <label className="mb-2 block text-[10px] text-black">目标名称</label>
-              <input
-                className="w-full rounded-none border-4 border-black bg-white px-3 py-2 text-[12px] text-black outline-none"
-                onChange={(event) => setGoalTitle(event.target.value)}
-                value={goalTitle}
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-[10px] text-black">持续天数</label>
-              <input
-                className="w-full rounded-none border-4 border-black bg-white px-3 py-2 text-[12px] text-black outline-none"
-                min={1}
-                onChange={(event) =>
-                  setDaysRequired(Math.max(1, Number(event.target.value) || 1))
-                }
-                type="number"
-                value={daysRequired}
-              />
-            </div>
+          <div className="mt-6">
+            <label className={`text-xs uppercase tracking-[0.18em] ${theme.muted}`}>
+              Goal Name
+            </label>
+            <input
+              className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors duration-500 focus:border-slate-500 ${theme.input}`}
+              onChange={(event) => setGoalTitle(event.target.value)}
+              value={goalTitle}
+            />
           </div>
 
-          {createError ? (
-            <p className="mt-4 text-[10px] text-[#8b1c1c]">{createError}</p>
-          ) : null}
+          {createError ? <p className="mt-3 text-xs text-red-400">{createError}</p> : null}
 
           <div className="mt-6 flex justify-end">
-            <button className={neobrutalButton} onClick={handleCreateGoal} type="button">
-              许下一个小心愿
+            <button
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-500 ${theme.button}`}
+              onClick={handleCreateGoal}
+              type="button"
+            >
+              Start Console
             </button>
           </div>
         </div>
@@ -126,13 +174,28 @@ export default function HomePage() {
     );
   }
 
-  const currentPhase = getCurrentPhase(activeGoal);
+  const workflowPhase = getCurrentPhase(activeGoal);
   const todayLog = getTodayLog(activeGoal);
-  const completion = calculateGoalCompletion(activeGoal);
-  const dayCount = getGoalDay(activeGoal.startDate, activeGoal.daysRequired);
-  const evolutionStage = getEvolutionStage(completion);
-  const horsePhase = currentPhase === "completed" ? "evening" : currentPhase;
-  const horseEnergy = todayLog?.energyLevel ?? 65;
+
+  const goalCompletion = useMemo(
+    () => calculateGoalCompletion(activeGoal),
+    [activeGoal]
+  );
+
+  const totalDaysInvested = useMemo(
+    () => getDaysActive(activeGoal.startDate),
+    [activeGoal.startDate, clockTick]
+  );
+
+  const cumulativeFocusTime = useMemo(() => {
+    const total = activeGoal.history.reduce((sum, log) => sum + Math.max(0, log.actualDone), 0);
+    return Number(total.toFixed(2));
+  }, [activeGoal.history]);
+
+  const stabilityInterpretation = useMemo(
+    () => getStabilityInterpretation(stabilityScore),
+    [stabilityScore]
+  );
 
   const handlePhaseCommit = (payload: {
     phase: "morning" | "afternoon" | "evening";
@@ -148,50 +211,73 @@ export default function HomePage() {
 
   return (
     <main
-      className={`min-h-screen bg-gradient-to-b px-4 py-5 transition-colors duration-700 ${phaseBackground[currentPhase]}`}
+      className={`min-h-screen px-4 py-6 transition-colors duration-500 ${theme.page} ${theme.text}`}
     >
-      <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col">
-        <header className="rounded-none border-4 border-black bg-white/85 p-4 shadow-[8px_8px_0_#000] backdrop-blur">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1 text-black">
-              <h1 className="text-[13px] leading-relaxed">小马成长记</h1>
-              <p className="text-[10px]">今天的小心愿：{activeGoal.title}</p>
-              <p className="text-[10px]">
-                陪伴你的第 {dayCount} 天 / 共 {activeGoal.daysRequired} 天
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <header
+          className={`rounded-3xl border p-6 shadow-sm backdrop-blur transition-colors duration-500 ${theme.panel} ${theme.border}`}
+        >
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Digital Lab Console</p>
+              <h1 className="mt-3 text-2xl font-semibold">System Integrity: {activeGoal.title}</h1>
+              <p className={`mt-2 text-sm ${theme.muted}`}>
+                Theme: {theme.label} | Phase: {workflowLabels[workflowPhase]}
               </p>
-              <p className="text-[10px]">我们一起走到了 {completion.toFixed(2)}%</p>
+              <p className="mt-1 font-mono text-xs text-slate-500">
+                Stability Interpretation: {stabilityInterpretation}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-none border-4 border-black bg-black px-3 py-2 text-[10px] text-white">
-                {phaseName[currentPhase]}
-              </span>
-              <button
-                className="rounded-none border-4 border-black bg-[#ffebe4] px-3 py-2 text-[9px] text-black shadow-[4px_4px_0_#000] transition-transform active:translate-y-[2px] active:shadow-[2px_2px_0_#000]"
-                onClick={clearStore}
-                type="button"
-              >
-                重新开始
-              </button>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  Total Days Invested
+                </p>
+                <p className="mt-1 text-lg font-semibold">{totalDaysInvested}</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  Cumulative Focus Time
+                </p>
+                <p className="mt-1 text-lg font-semibold">{cumulativeFocusTime.toFixed(2)}</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  Goal Completion
+                </p>
+                <p className="mt-1 text-lg font-semibold">{goalCompletion.toFixed(2)}%</p>
+              </div>
+
+              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                  System Integrity Score
+                </p>
+                <p className="mt-1 font-mono text-lg font-semibold">{stabilityScore.toFixed(2)}%</p>
+              </div>
             </div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <button
+              className={`rounded-xl px-4 py-2 text-xs font-medium transition-colors duration-500 ${theme.button}`}
+              onClick={clearStore}
+              type="button"
+            >
+              Reset Goal Store
+            </button>
           </div>
         </header>
 
-        <section className="flex flex-1 items-center justify-center py-6">
-          <PixelHorse
-            energy={horseEnergy}
-            evolutionStage={evolutionStage}
-            phase={horsePhase}
-          />
-        </section>
-
-        <footer className="pb-4">
-          <PhaseController
-            defaultBaseTarget={todayLog?.baseTarget ?? 10}
-            onCommit={handlePhaseCommit}
-            phase={currentPhase}
-            todayLog={todayLog}
-          />
-        </footer>
+        <PhaseController
+          defaultBaseTarget={todayLog?.baseTarget ?? 10}
+          goalCompletion={goalCompletion}
+          onCommit={handlePhaseCommit}
+          phase={workflowPhase}
+          todayLog={todayLog}
+        />
       </div>
     </main>
   );

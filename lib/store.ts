@@ -13,18 +13,18 @@ export type DailyLog = {
 
 export type DayPhase = DailyLog["phase"];
 
+type GoalStatus = "active" | "completed" | "abandoned";
+
 export type Goal = {
   id: string;
   title: string;
-  daysRequired: number;
   startDate: string;
   history: DailyLog[];
-  status: "active" | "completed" | "abandoned";
+  status: GoalStatus;
 };
 
 type CreateGoalInput = {
   title: string;
-  daysRequired: number;
   startDate?: string;
 };
 
@@ -35,6 +35,7 @@ type DailyLogInput = Omit<DailyLog, "date"> & {
 type GoalStore = {
   activeGoal: Goal | null;
   archivedGoals: Goal[];
+  stabilityScore: number;
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
   createGoal: (input: CreateGoalInput) => { ok: boolean; reason?: string };
@@ -45,14 +46,30 @@ type GoalStore = {
 };
 
 const STORE_KEY = "yearofhorse-store";
+const STORE_VERSION = 2;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
 
 export const getTodayKey = () => {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
+};
+
+export const getDaysActive = (startDate: string, date = getTodayKey()) => {
+  const start = new Date(`${startDate}T00:00:00`);
+  const current = new Date(`${date}T00:00:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(current.getTime())) {
+    return 1;
+  }
+
+  const diffDays = Math.floor((current.getTime() - start.getTime()) / 86400000) + 1;
+  return Math.max(diffDays, 1);
 };
 
 const phaseOrder: Record<DayPhase, number> = {
@@ -108,22 +125,80 @@ export const calculateProgress = (
 };
 
 export const calculateGoalCompletion = (goal: Goal) => {
-  if (goal.daysRequired <= 0) {
+  if (goal.history.length === 0) {
     return 0;
   }
 
-  const dayCredits = goal.history.reduce((sum, log) => {
+  const totalCompletion = goal.history.reduce((sum, log) => {
     const dailyProgress = calculateProgress(
       log.energyLevel,
       log.actualDone,
       log.baseTarget
     );
 
-    return sum + clamp(dailyProgress, 0, 100) / 100;
+    return sum + clamp(dailyProgress, 0, 100);
   }, 0);
 
-  const completion = (dayCredits / goal.daysRequired) * 100;
-  return Number(clamp(completion, 0, 100).toFixed(2));
+  const averageCompletion = totalCompletion / goal.history.length;
+  return Number(clamp(averageCompletion, 0, 100).toFixed(2));
+};
+
+export const calculateStability = (logs: DailyLog[]) => {
+  if (logs.length === 0) {
+    return 0;
+  }
+
+  const recentLogs = [...logs].slice(-7);
+  const latestDate = recentLogs.at(-1)?.date;
+  const latestDateMs = latestDate
+    ? new Date(`${latestDate}T00:00:00`).getTime()
+    : Number.NaN;
+
+  const { scoreWeightedSum, weightSum } = recentLogs.reduce(
+    (acc, log) => {
+      const logDateMs = new Date(`${log.date}T00:00:00`).getTime();
+      const daysFromLatest =
+        Number.isNaN(latestDateMs) || Number.isNaN(logDateMs)
+          ? Number.POSITIVE_INFINITY
+          : Math.floor((latestDateMs - logDateMs) / 86400000);
+      const weight = daysFromLatest <= 2 ? 2 : 1;
+
+      const energy = clamp(log.energyLevel, 0, 100);
+      const completion = clamp(
+        calculateProgress(log.energyLevel, log.actualDone, log.baseTarget),
+        0,
+        100
+      );
+      const alignment = 100 - Math.abs(energy - completion);
+
+      // Completion and energy are both important, but mismatch between the two
+      // is penalized to surface unstable patterns (high energy + low completion).
+      let sampleScore = completion * 0.45 + energy * 0.2 + alignment * 0.35;
+
+      const energyLead = energy - completion;
+      const completionLead = completion - energy;
+      if (energyLead > 40) {
+        sampleScore -= 15;
+      }
+
+      if (completionLead > 20) {
+        sampleScore += 5;
+      }
+
+      return {
+        scoreWeightedSum: acc.scoreWeightedSum + sampleScore * weight,
+        weightSum: acc.weightSum + weight
+      };
+    },
+    { scoreWeightedSum: 0, weightSum: 0 }
+  );
+
+  if (weightSum === 0) {
+    return 0;
+  }
+
+  const stability = scoreWeightedSum / weightSum;
+  return Number(clamp(stability, 0, 100).toFixed(2));
 };
 
 const upsertDailyLog = (history: DailyLog[], incoming: DailyLog) => {
@@ -150,12 +225,63 @@ const moveToArchive = (
   archivedGoals: Goal[]
 ) => {
   if (!current) {
-    return { activeGoal: null, archivedGoals };
+    return { activeGoal: null, archivedGoals, stabilityScore: 0 };
   }
 
   return {
     activeGoal: null,
-    archivedGoals: [{ ...current, status }, ...archivedGoals]
+    archivedGoals: [{ ...current, status }, ...archivedGoals],
+    stabilityScore: 0
+  };
+};
+
+const normalizeLog = (raw: unknown): DailyLog | null => {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const phase = raw.phase;
+  if (
+    phase !== "morning" &&
+    phase !== "afternoon" &&
+    phase !== "evening" &&
+    phase !== "completed"
+  ) {
+    return null;
+  }
+
+  return {
+    date: typeof raw.date === "string" ? raw.date : getTodayKey(),
+    phase,
+    energyLevel: clamp(Number(raw.energyLevel) || 0, 0, 100),
+    baseTarget: Math.max(0, Number(raw.baseTarget) || 0),
+    actualDone: Math.max(0, Number(raw.actualDone) || 0)
+  };
+};
+
+const normalizeGoal = (raw: unknown): Goal | null => {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const rawHistory = Array.isArray(raw.history) ? raw.history : [];
+  const history = rawHistory
+    .map((log) => normalizeLog(log))
+    .filter((log): log is DailyLog => log !== null)
+    .reduce<DailyLog[]>((acc, log) => upsertDailyLog(acc, log), []);
+
+  const statusValue = raw.status;
+  const status: GoalStatus =
+    statusValue === "completed" || statusValue === "abandoned" || statusValue === "active"
+      ? statusValue
+      : "active";
+
+  return {
+    id: typeof raw.id === "string" ? raw.id : createId(),
+    title: typeof raw.title === "string" && raw.title.trim() ? raw.title : "Untitled Goal",
+    startDate: typeof raw.startDate === "string" ? raw.startDate : getTodayKey(),
+    history,
+    status
   };
 };
 
@@ -164,11 +290,11 @@ export const useGoalStore = create<GoalStore>()(
     (set, get) => ({
       activeGoal: null,
       archivedGoals: [],
+      stabilityScore: 0,
       hasHydrated: false,
       setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
-      createGoal: ({ title, daysRequired, startDate }) => {
+      createGoal: ({ title, startDate }) => {
         const trimmedTitle = title.trim();
-        const safeDaysRequired = Math.max(1, Math.floor(daysRequired));
 
         if (!trimmedTitle) {
           return { ok: false, reason: "Goal title cannot be empty." };
@@ -184,13 +310,12 @@ export const useGoalStore = create<GoalStore>()(
         const goal: Goal = {
           id: createId(),
           title: trimmedTitle,
-          daysRequired: safeDaysRequired,
           startDate: startDate ?? getTodayKey(),
           history: [],
           status: "active"
         };
 
-        set({ activeGoal: goal });
+        set({ activeGoal: goal, stabilityScore: 0 });
         return { ok: true };
       },
       addDailyLog: (input) => {
@@ -212,18 +337,8 @@ export const useGoalStore = create<GoalStore>()(
           history: upsertDailyLog(currentGoal.history, log)
         };
 
-        const completion = calculateGoalCompletion(updatedGoal);
-        if (completion >= 100) {
-          const next = moveToArchive(
-            updatedGoal,
-            "completed",
-            get().archivedGoals
-          );
-          set(next);
-          return;
-        }
-
-        set({ activeGoal: updatedGoal });
+        const nextStability = calculateStability(updatedGoal.history);
+        set({ activeGoal: updatedGoal, stabilityScore: nextStability });
       },
       completeActiveGoal: () => {
         const { activeGoal, archivedGoals } = get();
@@ -236,16 +351,40 @@ export const useGoalStore = create<GoalStore>()(
       clearStore: () => {
         set({
           activeGoal: null,
-          archivedGoals: []
+          archivedGoals: [],
+          stabilityScore: 0
         });
       }
     }),
     {
       name: STORE_KEY,
+      version: STORE_VERSION,
       storage: createJSONStorage(() => localStorage),
+      migrate: (persistedState) => {
+        const state = isRecord(persistedState) ? persistedState : {};
+
+        const activeGoal = normalizeGoal(state.activeGoal);
+        const archivedGoals = Array.isArray(state.archivedGoals)
+          ? state.archivedGoals
+              .map((goal) => normalizeGoal(goal))
+              .filter((goal): goal is Goal => goal !== null)
+          : [];
+
+        const rawStability = Number(state.stabilityScore);
+        const stabilityScore = Number.isFinite(rawStability)
+          ? clamp(rawStability, 0, 100)
+          : calculateStability(activeGoal?.history ?? []);
+
+        return {
+          activeGoal,
+          archivedGoals,
+          stabilityScore
+        };
+      },
       partialize: (state) => ({
         activeGoal: state.activeGoal,
-        archivedGoals: state.archivedGoals
+        archivedGoals: state.archivedGoals,
+        stabilityScore: state.stabilityScore
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);

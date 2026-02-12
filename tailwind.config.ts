@@ -14,15 +14,6 @@ const config: Config = {
         "yoh-panel": "#2f4366",
         "yoh-accent": "#f6c344",
         "yoh-text": "#f7f9ff"
-      },
-      keyframes: {
-        horseBounce: {
-          "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-8px)" }
-        }
-      },
-      animation: {
-        "horse-bounce": "horseBounce 0.9s steps(2, end) infinite"
       }
     }
   },
