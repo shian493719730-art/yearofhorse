@@ -12,8 +12,15 @@ export default function HomePage() {
   const [goalInput, setGoalInput] = useState("");
   const [createError, setCreateError] = useState("");
 
+  const handleReset = () => {
+    if (window.confirm("【开发调试】确定要清除数据，回到初始状态吗？")) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
   const themeClass =
-    "bg-[#F2F2F7] text-slate-900 font-mono antialiased selection:bg-blue-100 selection:text-blue-900";
+    "bg-[#F5F5F7] text-slate-900 font-mono antialiased selection:bg-blue-100 selection:text-blue-900";
 
   if (!hasHydrated) {
     return (
@@ -26,7 +33,7 @@ export default function HomePage() {
   if (!activeGoal) {
     return (
       <main className={`min-h-screen flex flex-col items-center justify-center p-6 ${themeClass}`}>
-        <div className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.1)] space-y-8 transition-all hover:scale-[1.01] duration-500 ease-out">
+        <div className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.05)] space-y-8 transition-all duration-500 ease-out">
           <div className="space-y-3 text-center">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">开启新旅程</h1>
             <p className="text-sm text-slate-400 font-medium">设定一个你想长期坚持的目标</p>
@@ -42,7 +49,7 @@ export default function HomePage() {
                 value={goalInput}
                 onChange={(event) => setGoalInput(event.target.value)}
                 placeholder="例如：每天阅读..."
-                className="w-full bg-slate-50 border-none p-5 rounded-2xl focus:ring-2 focus:ring-blue-500/20 text-lg placeholder-slate-300 transition-all font-medium text-center"
+                className="w-full bg-slate-50 border-none p-5 rounded-2xl focus:ring-2 focus:ring-blue-500/20 text-lg placeholder-slate-300 transition-all font-medium text-center outline-none"
               />
             </div>
 
@@ -72,9 +79,17 @@ export default function HomePage() {
   const daysActive = getDaysActive(activeGoal.startDate);
 
   return (
-    <main className={`min-h-screen flex items-center justify-center p-4 ${themeClass}`}>
-      <div className="w-full max-w-md bg-white rounded-[40px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.1)] overflow-hidden border border-white/50 relative">
-        <header className="flex justify-between items-center p-8 pb-4 bg-white/80 backdrop-blur-xl z-10 sticky top-0">
+    <main className={`min-h-screen flex items-center justify-center p-4 ${themeClass} relative`}>
+      <button
+        onClick={handleReset}
+        className="fixed bottom-4 right-4 text-[10px] text-slate-300 hover:text-red-500 transition-colors uppercase font-bold z-50 cursor-pointer"
+        type="button"
+      >
+        [ Reset ]
+      </button>
+
+      <div className="w-full max-w-md bg-white rounded-[44px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.08)] overflow-hidden border border-white/60 relative">
+        <header className="flex justify-between items-center p-8 pb-2 bg-white/80 backdrop-blur-xl z-10 sticky top-0">
           <div className="space-y-1 min-w-0">
             <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
               Current Goal
@@ -83,13 +98,13 @@ export default function HomePage() {
               {activeGoal.title}
             </h1>
           </div>
-          <div className="text-right bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
-            <span className="text-[10px] text-slate-400 font-bold uppercase mr-2">Day</span>
-            <span className="text-xl font-bold text-slate-800">{daysActive}</span>
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] text-slate-400 font-bold uppercase">Day</span>
+            <span className="text-2xl font-bold text-slate-800 leading-none">{daysActive}</span>
           </div>
         </header>
 
-        <div className="px-8 pb-8">
+        <div className="px-6 pb-8">
           <PhaseController />
         </div>
       </div>
