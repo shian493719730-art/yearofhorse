@@ -42,6 +42,7 @@ export function PhaseController() {
   const [actualDone, setActualDone] = useState(0);
   const [energyTouched, setEnergyTouched] = useState(false);
   const [outputTouched, setOutputTouched] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   useEffect(() => {
     if (!todayLog) {
@@ -49,6 +50,7 @@ export function PhaseController() {
       setActualDone(0);
       setEnergyTouched(false);
       setOutputTouched(false);
+      setHasUnsavedChanges(false);
       return;
     }
 
@@ -56,9 +58,11 @@ export function PhaseController() {
     setActualDone(todayLog.actualDone || 0);
     setEnergyTouched(todayLog.energyLevel !== 50 || todayLog.actualDone > 0);
     setOutputTouched(todayLog.actualDone > 0);
+    setHasUnsavedChanges(false);
   }, [todayLog]);
 
   const handleSliderChange = (type: "energy" | "output", value: number) => {
+    setHasUnsavedChanges(true);
     if (type === "energy") {
       setEnergy(value);
       setEnergyTouched(true);
@@ -206,6 +210,7 @@ export function PhaseController() {
       baseTarget: BASE_TASK,
       actualDone: Math.max(0, actualDone)
     });
+    setHasUnsavedChanges(false);
   };
 
   return (
@@ -324,17 +329,19 @@ export function PhaseController() {
 
         <button
           onClick={handleSave}
-          disabled={!energyTouched}
-          className={`w-full py-4 text-white rounded-[20px] font-bold text-base tracking-wide transition-all duration-200 active:translate-y-1 active:shadow-none disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed ${
-            isMaxed
-              ? "bg-pink-500 shadow-[0_6px_0_#be185d]"
-              : isGolden
-                ? "bg-yellow-400 text-yellow-900 shadow-[0_6px_0_#ca8a04]"
-                : "bg-slate-900 shadow-[0_6px_0_#0f172a]"
+          disabled={!hasUnsavedChanges && !isMaxed}
+          className={`w-full py-4 rounded-[20px] font-bold text-base tracking-wide transition-all duration-300 active:translate-y-1 active:shadow-none ${
+            hasUnsavedChanges || isMaxed
+              ? isMaxed
+                ? "bg-pink-500 text-white shadow-[0_6px_0_#be185d]"
+                : isGolden
+                  ? "bg-yellow-400 text-yellow-900 shadow-[0_6px_0_#ca8a04]"
+                  : "bg-slate-900 text-white shadow-[0_6px_0_#0f172a]"
+              : "bg-slate-200 text-slate-400 shadow-none cursor-default"
           }`}
           type="button"
         >
-          {isMaxed ? "记录高光时刻！" : "记录今天"}
+          {isMaxed ? "记录高光时刻！" : hasUnsavedChanges ? "确定" : "已同步"}
         </button>
       </section>
     </>
