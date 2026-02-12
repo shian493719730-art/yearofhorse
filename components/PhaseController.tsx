@@ -156,7 +156,7 @@ export function PhaseController() {
               />
             </div>
             <div className="text-center">
-              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">产出</div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">进度</div>
               <div
                 className={`text-xl font-bold font-mono ${
                   isMaxed ? "text-pink-500" : isGolden ? "text-yellow-500" : "text-blue-500"
