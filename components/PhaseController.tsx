@@ -40,32 +40,33 @@ export function PhaseController() {
 
   const [energy, setEnergy] = useState(50);
   const [actualDone, setActualDone] = useState(0);
-  const [hasInteracted, setHasInteracted] = useState(false);
+  const [energyTouched, setEnergyTouched] = useState(false);
+  const [outputTouched, setOutputTouched] = useState(false);
 
   useEffect(() => {
     if (!todayLog) {
       setEnergy(50);
       setActualDone(0);
-      setHasInteracted(false);
+      setEnergyTouched(false);
+      setOutputTouched(false);
       return;
     }
 
     setEnergy(todayLog.energyLevel);
     setActualDone(todayLog.actualDone || 0);
-
-    if (todayLog.actualDone > 0 || todayLog.energyLevel !== 50) {
-      setHasInteracted(true);
-    }
+    setEnergyTouched(todayLog.energyLevel !== 50 || todayLog.actualDone > 0);
+    setOutputTouched(todayLog.actualDone > 0);
   }, [todayLog]);
 
   const handleSliderChange = (type: "energy" | "output", value: number) => {
-    setHasInteracted(true);
     if (type === "energy") {
       setEnergy(value);
+      setEnergyTouched(true);
       return;
     }
 
     setActualDone(value);
+    setOutputTouched(true);
   };
 
   const recommendedTask = calculateRecommended(energy);
@@ -92,22 +93,50 @@ export function PhaseController() {
       return "bg-purple-500 border-b-4 border-purple-700";
     }
 
+    if (!energyTouched) {
+      return "bg-slate-200 border-b-4 border-slate-300";
+    }
+
     return "bg-blue-500 border-b-4 border-blue-700";
   };
 
   const getFeedback = () => {
-    if (!hasInteracted && energy === 50 && actualDone === 0) {
+    if (!energyTouched && !outputTouched && energy === 50) {
       return {
         title: "准备出发",
-        text: "滑动调节今日能量与进度，开启新的一天。",
+        text: "首先，滑动左侧确认今天的能量状态。",
         bg: "bg-slate-50 text-slate-500 border-slate-200"
+      };
+    }
+
+    if (energyTouched && !outputTouched) {
+      if (energy < 40) {
+        return {
+          title: "能量低",
+          text: "累了可以休息休息，不用勉强。",
+          bg: "bg-slate-50 text-slate-600 border-slate-200"
+        };
+      }
+
+      if (energy <= 75) {
+        return {
+          title: "平稳",
+          text: "平凡的一天也很珍贵。",
+          bg: "bg-blue-50 text-blue-900 border-blue-200"
+        };
+      }
+
+      return {
+        title: "能量高",
+        text: "今天心情还不错嘛！感觉能做很多事。",
+        bg: "bg-yellow-50 text-yellow-900 border-yellow-200"
       };
     }
 
     if (isMaxed) {
       return {
         title: "完美共振",
-        text: "不可思议的状态！你今天在发光！",
+        text: "不可思议的状态！知行合一的最高境界。",
         bg: "bg-gradient-to-r from-pink-100 to-purple-100 text-purple-900 border-purple-200"
       };
     }
@@ -153,13 +182,14 @@ export function PhaseController() {
     }
 
     return {
-      title: "今日记录",
-      text: "数据已记录。",
+      title: "记录中",
+      text: "正在同步今日数据...",
       bg: "bg-slate-50 text-slate-600 border-slate-200"
     };
   };
 
   const feedback = getFeedback();
+  const actualDoneDisplay = Number(actualDone.toFixed(1));
 
   const handleSave = () => {
     if (!activeGoal) {
@@ -208,7 +238,11 @@ export function PhaseController() {
             </div>
           </div>
 
-          <div className="group flex flex-col items-center space-y-3 w-24">
+          <div
+            className={`group flex flex-col items-center space-y-3 w-24 transition-opacity duration-300 ${
+              !energyTouched ? "opacity-50 grayscale" : "opacity-100"
+            }`}
+          >
             <div className="relative w-full h-48 bg-slate-100 rounded-[24px] overflow-hidden border-2 border-slate-100">
               <div
                 className="absolute w-full border-t-4 border-dotted border-slate-300 z-20 transition-all duration-500 opacity-60"
@@ -227,7 +261,7 @@ export function PhaseController() {
                   isMaxed ? "text-pink-500" : isGolden ? "text-yellow-500" : "text-blue-500"
                 }`}
               >
-                {actualDone}h
+                {actualDoneDisplay}h
               </div>
             </div>
           </div>
@@ -240,7 +274,12 @@ export function PhaseController() {
             <h3 className="text-xs font-bold uppercase tracking-widest opacity-60 mb-2">
               {feedback.title}
             </h3>
-            <p className="text-sm font-bold leading-relaxed">{feedback.text}</p>
+            <p
+              key={feedback.text}
+              className="text-sm font-bold leading-relaxed transition-all duration-300"
+            >
+              {feedback.text}
+            </p>
           </div>
           {isMaxed ? <div className="absolute inset-0 bg-white/20 animate-pulse" /> : null}
         </div>
@@ -261,7 +300,11 @@ export function PhaseController() {
             />
           </div>
 
-          <div className="space-y-3">
+          <div
+            className={`space-y-3 transition-opacity duration-300 ${
+              !energyTouched ? "opacity-40 pointer-events-none" : "opacity-100"
+            }`}
+          >
             <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               <span>没做</span>
               <span>超额完成</span>
@@ -270,17 +313,19 @@ export function PhaseController() {
               type="range"
               min="0"
               max={MAX_TASK}
-              step="0.5"
+              step="0.1"
               value={actualDone}
+              disabled={!energyTouched}
               onChange={(event) => handleSliderChange("output", Number(event.target.value))}
-              className="w-full h-5 bg-slate-100 rounded-full appearance-none cursor-pointer focus:outline-none border-2 border-slate-100 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_4px_0px_rgba(0,0,0,0.1)] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-slate-200 [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:active:scale-95"
+              className="w-full h-5 bg-slate-100 rounded-full appearance-none cursor-pointer focus:outline-none border-2 border-slate-100 disabled:cursor-not-allowed [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_4px_0px_rgba(0,0,0,0.1)] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-slate-200 [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:active:scale-95"
             />
           </div>
         </div>
 
         <button
           onClick={handleSave}
-          className={`w-full py-4 text-white rounded-[20px] font-bold text-base tracking-wide transition-all duration-200 active:translate-y-1 active:shadow-none ${
+          disabled={!energyTouched}
+          className={`w-full py-4 text-white rounded-[20px] font-bold text-base tracking-wide transition-all duration-200 active:translate-y-1 active:shadow-none disabled:bg-slate-300 disabled:shadow-none disabled:cursor-not-allowed ${
             isMaxed
               ? "bg-pink-500 shadow-[0_6px_0_#be185d]"
               : isGolden
