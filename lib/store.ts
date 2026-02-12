@@ -19,6 +19,7 @@ export type Goal = {
   id: string;
   title: string;
   startDate: string;
+  totalDays: number;
   history: DailyLog[];
   status: GoalStatus;
 };
@@ -26,6 +27,7 @@ export type Goal = {
 type CreateGoalInput = {
   title: string;
   startDate?: string;
+  totalDays?: number;
 };
 
 type DailyLogInput = Omit<DailyLog, "date"> & {
@@ -38,7 +40,10 @@ type GoalStore = {
   stabilityScore: number;
   hasHydrated: boolean;
   setHasHydrated: (hydrated: boolean) => void;
-  createGoal: (input: CreateGoalInput) => { ok: boolean; reason?: string };
+  createGoal: (
+    input: CreateGoalInput | string,
+    totalDays?: number
+  ) => { ok: boolean; reason?: string };
   addDailyLog: (input: DailyLogInput) => void;
   completeActiveGoal: () => void;
   abandonActiveGoal: () => void;
@@ -46,13 +51,23 @@ type GoalStore = {
 };
 
 const STORE_KEY = "yearofhorse-store";
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
+const DEFAULT_TOTAL_DAYS = 21;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const normalizeTotalDays = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_TOTAL_DAYS;
+  }
+
+  return Math.max(1, Math.floor(parsed));
+};
 
 export const getTodayKey = () => {
   const now = new Date();
@@ -280,6 +295,7 @@ const normalizeGoal = (raw: unknown): Goal | null => {
     id: typeof raw.id === "string" ? raw.id : createId(),
     title: typeof raw.title === "string" && raw.title.trim() ? raw.title : "Untitled Goal",
     startDate: typeof raw.startDate === "string" ? raw.startDate : getTodayKey(),
+    totalDays: normalizeTotalDays(raw.totalDays ?? raw.daysRequired),
     history,
     status
   };
@@ -293,7 +309,12 @@ export const useGoalStore = create<GoalStore>()(
       stabilityScore: 0,
       hasHydrated: false,
       setHasHydrated: (hydrated) => set({ hasHydrated: hydrated }),
-      createGoal: ({ title, startDate }) => {
+      createGoal: (input, totalDays) => {
+        const payload =
+          typeof input === "string"
+            ? { title: input, totalDays }
+            : { ...input, totalDays: input.totalDays ?? totalDays };
+        const { title, startDate } = payload;
         const trimmedTitle = title.trim();
 
         if (!trimmedTitle) {
@@ -311,6 +332,7 @@ export const useGoalStore = create<GoalStore>()(
           id: createId(),
           title: trimmedTitle,
           startDate: startDate ?? getTodayKey(),
+          totalDays: normalizeTotalDays(payload.totalDays),
           history: [],
           status: "active"
         };

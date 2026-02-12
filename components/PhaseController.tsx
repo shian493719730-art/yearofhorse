@@ -15,17 +15,33 @@ export function PhaseController() {
 
   const [energy, setEnergy] = useState(50);
   const [actualDone, setActualDone] = useState(0);
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   useEffect(() => {
     if (!todayLog) {
       setEnergy(50);
       setActualDone(0);
+      setHasInteracted(false);
       return;
     }
 
     setEnergy(todayLog.energyLevel);
     setActualDone(todayLog.actualDone || 0);
+
+    if (todayLog.actualDone > 0 || todayLog.energyLevel !== 50) {
+      setHasInteracted(true);
+    }
   }, [todayLog]);
+
+  const handleSliderChange = (type: "energy" | "output", value: number) => {
+    setHasInteracted(true);
+    if (type === "energy") {
+      setEnergy(value);
+      return;
+    }
+
+    setActualDone(value);
+  };
 
   const recommendedTask = BASE_TASK * (energy / 100 + 0.3);
   const clampedRec = clamp(recommendedTask, 1, 6);
@@ -34,7 +50,7 @@ export function PhaseController() {
   const recLinePercent = clamp((clampedRec / 6) * 100, 0, 100);
 
   const isMaxed = energy >= 100 && outputPercent >= 100;
-  const isGolden = !isMaxed && energy > 80 && actualDone > clampedRec;
+  const isGolden = !isMaxed && energy > 80 && actualDone >= clampedRec;
 
   const getBarStyle = (type: "energy" | "output") => {
     if (isMaxed) {
@@ -53,6 +69,14 @@ export function PhaseController() {
   };
 
   const getFeedback = () => {
+    if (!hasInteracted && energy === 50 && actualDone === 0) {
+      return {
+        title: "准备出发",
+        text: "滑动调节今日能量与进度，开启新的一天。",
+        bg: "bg-slate-50 text-slate-500 border-slate-200"
+      };
+    }
+
     if (isMaxed) {
       return {
         title: "完美共振",
@@ -191,7 +215,7 @@ export function PhaseController() {
               min="0"
               max="100"
               value={energy}
-              onChange={(event) => setEnergy(Number(event.target.value))}
+              onChange={(event) => handleSliderChange("energy", Number(event.target.value))}
               className="w-full h-5 bg-slate-100 rounded-full appearance-none cursor-pointer focus:outline-none border-2 border-slate-100 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_4px_0px_rgba(0,0,0,0.1)] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-slate-200 [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:active:scale-95"
             />
           </div>
@@ -207,7 +231,7 @@ export function PhaseController() {
               max="6"
               step="0.5"
               value={actualDone}
-              onChange={(event) => setActualDone(Number(event.target.value))}
+              onChange={(event) => handleSliderChange("output", Number(event.target.value))}
               className="w-full h-5 bg-slate-100 rounded-full appearance-none cursor-pointer focus:outline-none border-2 border-slate-100 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_4px_0px_rgba(0,0,0,0.1)] [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-slate-200 [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:active:scale-95"
             />
           </div>
