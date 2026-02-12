@@ -4,16 +4,14 @@ import { useId } from "react";
 import { useGoalStore } from "@/lib/store";
 
 type ProgressCircleProps = {
-  value: number;
-  stability?: number;
-  size?: number;
-  label?: string;
+  percent: number;
+  energy: number;
 };
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-export const getEnergyColor = (value: number) => {
+const getEnergyColor = (value: number) => {
   const safe = clamp(value, 0, 100);
 
   if (safe <= 20) {
@@ -35,129 +33,81 @@ export const getEnergyColor = (value: number) => {
   return "rainbow";
 };
 
-const getGlowColor = (value: number) => {
-  const color = getEnergyColor(value);
+export function ProgressCircle({ percent, energy }: ProgressCircleProps) {
+  const stabilityScore = useGoalStore((state) => state.stabilityScore);
 
-  if (color === "rainbow") {
-    return "rgba(236, 72, 153, 0.4)";
-  }
-
-  return color;
-};
-
-const getStabilityColor = (value: number) => {
-  if (value > 80) {
-    return "#10B981";
-  }
-
-  if (value >= 50) {
-    return "#F59E0B";
-  }
-
-  return "#EF4444";
-};
-
-export function ProgressCircle({
-  value,
-  stability,
-  size = 220,
-  label = "Energy"
-}: ProgressCircleProps) {
-  const storeStability = useGoalStore((state) => state.stabilityScore);
-
-  const safeValue = clamp(value, 0, 100);
-  const safeStability = clamp(stability ?? storeStability, 0, 100);
   const gradientId = useId().replace(/:/g, "");
+  const radius = 66;
+  const stroke = 6;
+  const normalizedRadius = radius - stroke * 2;
+  const circumference = normalizedRadius * 2 * Math.PI;
 
-  const strokeWidth = 6;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (safeValue / 100) * circumference;
+  const safePercent = clamp(percent, 0, 100);
+  const safeEnergy = clamp(energy, 0, 100);
+  const safeStability = clamp(stabilityScore, 0, 100);
 
-  const stabilityStrokeWidth = 2;
-  const stabilityRadius = Math.max(4, radius - 12);
-  const stabilityCircumference = 2 * Math.PI * stabilityRadius;
-  const stabilityDashOffset =
-    stabilityCircumference - (safeStability / 100) * stabilityCircumference;
-
-  const energyColor = getEnergyColor(safeValue);
-  const strokeColor = energyColor === "rainbow" ? `url(#${gradientId})` : energyColor;
-  const stabilityColor = getStabilityColor(safeStability);
+  const strokeDashoffset = circumference - (safePercent / 100) * circumference;
+  const energyColor = getEnergyColor(safeEnergy);
+  const isRainbow = energyColor === "rainbow";
 
   return (
-    <div className="relative mx-auto flex h-[240px] w-[240px] items-center justify-center">
-      <svg
-        className="-rotate-90"
-        height={size}
-        role="img"
-        viewBox={`0 0 ${size} ${size}`}
-        width={size}
-      >
+    <div className="relative flex items-center justify-center">
+      <svg className="-rotate-90" height={radius * 2} viewBox="0 0 132 132" width={radius * 2}>
         <defs>
           <linearGradient id={gradientId} x1="0%" x2="100%" y1="0%" y2="0%">
-            <stop offset="0%" stopColor="#8B5CF6" />
-            <stop offset="20%" stopColor="#3B82F6" />
+            <stop offset="0%" stopColor="#EF4444" />
+            <stop offset="20%" stopColor="#F59E0B" />
             <stop offset="40%" stopColor="#10B981" />
-            <stop offset="60%" stopColor="#F59E0B" />
-            <stop offset="80%" stopColor="#EF4444" />
+            <stop offset="60%" stopColor="#3B82F6" />
+            <stop offset="80%" stopColor="#8B5CF6" />
             <stop offset="100%" stopColor="#EC4899" />
           </linearGradient>
         </defs>
 
         <circle
-          cx={size / 2}
-          cy={size / 2}
+          className={safeStability < 50 ? "text-red-500" : "text-current"}
+          cx={radius}
+          cy={radius}
           fill="transparent"
-          r={radius}
-          stroke="rgba(148, 163, 184, 0.25)"
-          strokeWidth={strokeWidth}
+          r={normalizedRadius + 8}
+          stroke="currentColor"
+          strokeDasharray="4 4"
+          strokeWidth="1"
+          style={{ opacity: 0.3 }}
         />
 
         <circle
-          cx={size / 2}
-          cy={size / 2}
+          cx={radius}
+          cy={radius}
           fill="transparent"
-          r={radius}
-          stroke={strokeColor}
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
+          r={normalizedRadius}
+          stroke="currentColor"
+          strokeWidth={stroke}
+          style={{ opacity: 0.12 }}
+        />
+
+        <circle
+          cx={radius}
+          cy={radius}
+          fill="transparent"
+          r={normalizedRadius}
+          stroke={isRainbow ? `url(#${gradientId})` : energyColor}
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
-          strokeWidth={strokeWidth}
+          strokeWidth={stroke}
           style={{
-            filter: `drop-shadow(0 0 4px ${getGlowColor(safeValue)})`,
-            transition: "stroke-dashoffset 500ms ease, stroke 500ms ease"
+            filter: "drop-shadow(0 0 4px rgba(15, 23, 42, 0.2))",
+            transition: "stroke-dashoffset 0.5s ease, stroke 0.5s ease"
           }}
-        />
-
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          fill="transparent"
-          r={stabilityRadius}
-          stroke="rgba(100, 116, 139, 0.3)"
-          strokeWidth={stabilityStrokeWidth}
-        />
-
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          fill="transparent"
-          r={stabilityRadius}
-          stroke={stabilityColor}
-          strokeDasharray={stabilityCircumference}
-          strokeDashoffset={stabilityDashOffset}
-          strokeLinecap="round"
-          strokeWidth={stabilityStrokeWidth}
-          style={{ transition: "stroke-dashoffset 500ms ease, stroke 500ms ease" }}
         />
       </svg>
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-        <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500">{label}</p>
-        <p className="mt-2 text-4xl font-semibold text-slate-900">{safeValue.toFixed(0)}%</p>
-        <p className="mt-2 font-mono text-[11px] tracking-[0.12em] text-slate-600">
-          System Integrity Score: {safeStability.toFixed(0)}%
-        </p>
+      <div className="absolute flex flex-col items-center justify-center space-y-1 text-center">
+        <span className="font-mono text-3xl font-bold tracking-tight">{Math.round(safePercent)}%</span>
+        <span className="border-t border-current/20 pt-1 font-mono text-[10px] opacity-60">
+          稳定性: {Math.round(safeStability)}
+        </span>
       </div>
     </div>
   );

@@ -2,133 +2,42 @@
 
 import { useEffect, useMemo, useState } from "react";
 import PhaseController from "@/components/PhaseController";
-import {
-  calculateGoalCompletion,
-  getCurrentPhase,
-  getDaysActive,
-  getTodayKey,
-  getTodayLog,
-  type DayPhase,
-  useGoalStore
-} from "@/lib/store";
-
-type ConsoleTheme = "morning" | "afternoon" | "night";
-
-const getThemeFromHour = (hour: number): ConsoleTheme => {
-  if (hour >= 5 && hour < 12) {
-    return "morning";
-  }
-
-  if (hour >= 12 && hour < 18) {
-    return "afternoon";
-  }
-
-  return "night";
-};
-
-const getLocalTheme = () => getThemeFromHour(new Date().getHours());
-
-const workflowLabels: Record<DayPhase, string> = {
-  morning: "Morning Calibration",
-  afternoon: "Afternoon Throughput",
-  evening: "Evening Consolidation",
-  completed: "Cycle Complete"
-};
-
-const getStabilityInterpretation = (score: number) => {
-  if (score > 80) {
-    return "Optimal / Stable";
-  }
-
-  if (score >= 50) {
-    return "Dynamic / Fluctuating";
-  }
-
-  return "Entropy Increasing / Critical";
-};
-
-const themeTokens: Record<
-  ConsoleTheme,
-  {
-    label: string;
-    page: string;
-    text: string;
-    panel: string;
-    border: string;
-    muted: string;
-    input: string;
-    button: string;
-  }
-> = {
-  morning: {
-    label: "Morning",
-    page: "bg-slate-50",
-    text: "text-slate-900",
-    panel: "bg-white/75",
-    border: "border-slate-200",
-    muted: "text-slate-600",
-    input: "bg-white border-slate-300 text-slate-900",
-    button: "bg-slate-900 text-white hover:bg-slate-700"
-  },
-  afternoon: {
-    label: "Afternoon",
-    page: "bg-slate-200",
-    text: "text-slate-900",
-    panel: "bg-slate-100/80",
-    border: "border-slate-300",
-    muted: "text-slate-700",
-    input: "bg-white border-slate-400 text-slate-900",
-    button: "bg-slate-900 text-white hover:bg-slate-700"
-  },
-  night: {
-    label: "Night",
-    page: "bg-slate-950",
-    text: "text-slate-100",
-    panel: "bg-slate-900/80",
-    border: "border-slate-700",
-    muted: "text-slate-400",
-    input: "bg-slate-950 border-slate-600 text-slate-100",
-    button: "bg-slate-100 text-slate-900 hover:bg-slate-300"
-  }
-};
+import { calculateStability, getDaysActive, useGoalStore } from "@/lib/store";
 
 export default function HomePage() {
   const hasHydrated = useGoalStore((state) => state.hasHydrated);
   const activeGoal = useGoalStore((state) => state.activeGoal);
   const createGoal = useGoalStore((state) => state.createGoal);
-  const addDailyLog = useGoalStore((state) => state.addDailyLog);
   const clearStore = useGoalStore((state) => state.clearStore);
-  const stabilityScore = useGoalStore((state) => state.stabilityScore);
 
-  const [goalTitle, setGoalTitle] = useState("Deep Work System");
+  const [goalInput, setGoalInput] = useState("");
+  const [hour, setHour] = useState(0);
   const [createError, setCreateError] = useState("");
-  const [themeKey, setThemeKey] = useState<ConsoleTheme>(getLocalTheme());
-  const [clockTick, setClockTick] = useState(() => Date.now());
 
   useEffect(() => {
-    const tick = () => {
-      setThemeKey(getLocalTheme());
-      setClockTick(Date.now());
-    };
-
-    tick();
-    const interval = window.setInterval(tick, 60000);
-    return () => window.clearInterval(interval);
+    setHour(new Date().getHours());
+    const timer = window.setInterval(() => setHour(new Date().getHours()), 60000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const theme = themeTokens[themeKey];
+  const themeClass = useMemo(() => {
+    if (hour >= 5 && hour < 11) {
+      return "bg-slate-50 text-slate-900";
+    }
 
-  const handleCreateGoal = () => {
-    const result = createGoal({ title: goalTitle });
-    setCreateError(result.ok ? "" : result.reason ?? "Unable to create goal.");
-  };
+    if (hour >= 11 && hour < 18) {
+      return "bg-slate-200 text-slate-800";
+    }
+
+    return "bg-slate-950 text-slate-100";
+  }, [hour]);
 
   if (!hasHydrated) {
     return (
       <main
-        className={`min-h-screen px-4 py-8 transition-colors duration-500 ${theme.page} ${theme.text}`}
+        className={`flex min-h-screen items-center justify-center p-6 font-mono transition-colors duration-500 ${themeClass}`}
       >
-        <p className="text-sm">Syncing Digital Lab Console data...</p>
+        <p className="text-sm opacity-70">正在同步今天的数据...</p>
       </main>
     );
   }
@@ -136,37 +45,42 @@ export default function HomePage() {
   if (!activeGoal) {
     return (
       <main
-        className={`min-h-screen px-4 py-8 transition-colors duration-500 ${theme.page} ${theme.text}`}
+        className={`flex min-h-screen items-center justify-center p-6 font-mono transition-colors duration-500 ${themeClass}`}
       >
-        <div
-          className={`mx-auto w-full max-w-2xl rounded-3xl border p-6 shadow-sm backdrop-blur transition-colors duration-500 ${theme.panel} ${theme.border}`}
-        >
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Digital Lab Console</p>
-          <h1 className="mt-3 text-2xl font-semibold">Initialize Long-term Goal Manager</h1>
-          <p className={`mt-2 text-sm ${theme.muted}`}>
-            Configure one perpetual goal to drive daily Energy and Progress tracking.
-          </p>
-
-          <div className="mt-6">
-            <label className={`text-xs uppercase tracking-[0.18em] ${theme.muted}`}>
-              Goal Name
-            </label>
-            <input
-              className={`mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors duration-500 focus:border-slate-500 ${theme.input}`}
-              onChange={(event) => setGoalTitle(event.target.value)}
-              value={goalTitle}
-            />
+        <div className="w-full max-w-md space-y-8 text-center">
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">开启新目标</h1>
+            <p className="opacity-80">设定一个你想长期坚持的目标。</p>
           </div>
 
-          {createError ? <p className="mt-3 text-xs text-red-400">{createError}</p> : null}
+          <div className="space-y-4 rounded-2xl border border-current/10 bg-white/10 p-6 text-left backdrop-blur-sm">
+            <div className="space-y-2">
+              <label className="text-sm font-bold opacity-70">我想坚持...</label>
+              <input
+                className="w-full border-b-2 border-current/30 bg-transparent p-2 text-lg transition-all focus:border-current focus:outline-none"
+                onChange={(event) => setGoalInput(event.target.value)}
+                placeholder="例如：每天写点东西..."
+                type="text"
+                value={goalInput}
+              />
+            </div>
 
-          <div className="mt-6 flex justify-end">
+            {createError ? <p className="text-xs text-red-400">{createError}</p> : null}
+
             <button
-              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-500 ${theme.button}`}
-              onClick={handleCreateGoal}
+              className="w-full rounded-xl border border-current/20 bg-current/10 py-4 font-bold transition-all hover:bg-current/20"
+              onClick={() => {
+                const title = goalInput.trim();
+                if (!title) {
+                  return;
+                }
+
+                const result = createGoal({ title });
+                setCreateError(result.ok ? "" : result.reason ?? "创建失败，请重试。");
+              }}
               type="button"
             >
-              Start Console
+              开始记录
             </button>
           </div>
         </div>
@@ -174,110 +88,64 @@ export default function HomePage() {
     );
   }
 
-  const workflowPhase = getCurrentPhase(activeGoal);
-  const todayLog = getTodayLog(activeGoal);
+  const logs = activeGoal.history;
+  const stability = calculateStability(logs);
+  const totalFocusTime = logs.reduce((sum, log) => sum + (log.actualDone || 0), 0);
+  const daysActive = getDaysActive(activeGoal.startDate);
 
-  const goalCompletion = useMemo(
-    () => calculateGoalCompletion(activeGoal),
-    [activeGoal]
-  );
-
-  const totalDaysInvested = useMemo(
-    () => getDaysActive(activeGoal.startDate),
-    [activeGoal.startDate, clockTick]
-  );
-
-  const cumulativeFocusTime = useMemo(() => {
-    const total = activeGoal.history.reduce((sum, log) => sum + Math.max(0, log.actualDone), 0);
-    return Number(total.toFixed(2));
-  }, [activeGoal.history]);
-
-  const stabilityInterpretation = useMemo(
-    () => getStabilityInterpretation(stabilityScore),
-    [stabilityScore]
-  );
-
-  const handlePhaseCommit = (payload: {
-    phase: "morning" | "afternoon" | "evening";
-    energyLevel: number;
-    baseTarget: number;
-    actualDone: number;
-  }) => {
-    addDailyLog({
-      ...payload,
-      date: getTodayKey()
-    });
-  };
+  let statusText = "刚刚开始";
+  if (logs.length > 0) {
+    if (stability >= 80) {
+      statusText = "状态很棒";
+    } else if (stability >= 50) {
+      statusText = "稳步前行";
+    } else {
+      statusText = "需要调整";
+    }
+  }
 
   return (
     <main
-      className={`min-h-screen px-4 py-6 transition-colors duration-500 ${theme.page} ${theme.text}`}
+      className={`flex min-h-screen items-center justify-center p-4 font-mono transition-colors duration-500 ${themeClass}`}
     >
-      <div className="mx-auto w-full max-w-6xl space-y-6">
-        <header
-          className={`rounded-3xl border p-6 shadow-sm backdrop-blur transition-colors duration-500 ${theme.panel} ${theme.border}`}
-        >
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Digital Lab Console</p>
-              <h1 className="mt-3 text-2xl font-semibold">System Integrity: {activeGoal.title}</h1>
-              <p className={`mt-2 text-sm ${theme.muted}`}>
-                Theme: {theme.label} | Phase: {workflowLabels[workflowPhase]}
-              </p>
-              <p className="mt-1 font-mono text-xs text-slate-500">
-                Stability Interpretation: {stabilityInterpretation}
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                  Total Days Invested
-                </p>
-                <p className="mt-1 text-lg font-semibold">{totalDaysInvested}</p>
-              </div>
-
-              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                  Cumulative Focus Time
-                </p>
-                <p className="mt-1 text-lg font-semibold">{cumulativeFocusTime.toFixed(2)}</p>
-              </div>
-
-              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                  Goal Completion
-                </p>
-                <p className="mt-1 text-lg font-semibold">{goalCompletion.toFixed(2)}%</p>
-              </div>
-
-              <div className="rounded-xl border border-slate-300/60 bg-slate-100/80 p-3 text-slate-800">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                  System Integrity Score
-                </p>
-                <p className="mt-1 font-mono text-lg font-semibold">{stabilityScore.toFixed(2)}%</p>
-              </div>
-            </div>
+      <div className="w-full max-w-md space-y-6">
+        <header className="flex items-end justify-between border-b-2 border-current/10 pb-4">
+          <div>
+            <p className="mb-1 text-xs font-bold opacity-50">当前目标</p>
+            <h1 className="max-w-[220px] truncate text-xl font-bold">{activeGoal.title}</h1>
           </div>
-
-          <div className="mt-5 flex justify-end">
-            <button
-              className={`rounded-xl px-4 py-2 text-xs font-medium transition-colors duration-500 ${theme.button}`}
-              onClick={clearStore}
-              type="button"
-            >
-              Reset Goal Store
-            </button>
+          <div className="text-right">
+            <p className="mb-1 text-xs font-bold opacity-50">坚持天数</p>
+            <p className="text-xl font-bold">{daysActive} 天</p>
           </div>
         </header>
 
-        <PhaseController
-          defaultBaseTarget={todayLog?.baseTarget ?? 10}
-          goalCompletion={goalCompletion}
-          onCommit={handlePhaseCommit}
-          phase={workflowPhase}
-          todayLog={todayLog}
-        />
+        <PhaseController />
+
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <div className="rounded-2xl border border-current/10 bg-current/5 p-4">
+            <p className="mb-1 text-xs opacity-60">专注时长</p>
+            <p className="text-2xl font-bold">
+              {totalFocusTime.toFixed(1)} <span className="text-sm opacity-50">小时</span>
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-current/10 bg-current/5 p-4">
+            <p className="mb-1 text-xs opacity-60">今日状态</p>
+            <p className="truncate text-xl font-bold">{Math.round(stability)} 分</p>
+            <p className="truncate text-xs opacity-50">{statusText}</p>
+          </div>
+        </div>
+
+        <div className="pt-2 text-right">
+          <button
+            className="rounded-xl border border-current/20 bg-current/10 px-3 py-2 text-xs font-bold transition-all hover:bg-current/20"
+            onClick={clearStore}
+            type="button"
+          >
+            重新开始
+          </button>
+        </div>
       </div>
     </main>
   );
