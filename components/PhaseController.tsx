@@ -105,11 +105,11 @@ export function PhaseController() {
   };
 
   const getFeedback = () => {
-    if (!energyTouched && !outputTouched && energy === 50) {
+    if (energy === 50 && actualDone === 0 && !hasUnsavedChanges) {
       return {
         title: "准备出发",
-        text: "首先，滑动左侧确认今天的能量状态。",
-        bg: "bg-slate-50 text-slate-500 border-slate-200"
+        text: "请滑动下侧图标确认今日能量状态",
+        bg: "bg-slate-50 text-slate-600 border-slate-200"
       };
     }
 
@@ -187,7 +187,7 @@ export function PhaseController() {
 
     return {
       title: "记录中",
-      text: "正在同步今日数据...",
+      text: "请滑动下侧图标确认今日能量状态",
       bg: "bg-slate-50 text-slate-600 border-slate-200"
     };
   };
