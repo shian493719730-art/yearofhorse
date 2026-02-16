@@ -5,109 +5,114 @@ import PhaseController from "@/components/PhaseController";
 import { useGoalStore, getDaysActive } from "@/lib/store";
 
 export default function HomePage() {
-  const isLoading = useGoalStore((state) => state.isLoading);
-  const fetchLatestGoal = useGoalStore((state) => state.fetchLatestGoal);
-  const activeGoal = useGoalStore((state) => state.activeGoal);
-  const createGoal = useGoalStore((state) => state.createGoal);
-  const updateGoal = useGoalStore((state) => state.updateGoal);
-
-  useEffect(() => { fetchLatestGoal(); }, []);
-
+  const store = useGoalStore();
+  const { activeGoal, isLoading, isRefetching, fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal } = store;
+  const [mounted, setMounted] = useState(false);
+  const [view, setView] = useState<any>("dashboard");
+  
   const [goalInput, setGoalInput] = useState("");
-  const [daysInput, setDaysInput] = useState("");
-  const [createError, setCreateError] = useState("");
+  const [daysInput, setDaysInput] = useState("21");
+  const [options, setOptions] = useState<any[]>([]);
+  const [finalUnit, setFinalUnit] = useState("");
+  const [finalBase, setFinalBase] = useState(4);
+
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDays, setEditDays] = useState("");
+  
+  const [isCreating, setIsCreating] = useState(false);
 
-  const themeClass = "bg-[#F5F5F7] text-slate-900 font-mono antialiased selection:bg-blue-100 selection:text-blue-900";
-
-  useEffect(() => {
-    if (activeGoal) {
-      setEditTitle(activeGoal.title);
-      setEditDays(String(activeGoal.totalDays || 21));
+  useEffect(() => { setMounted(true); fetchLatestGoal(); }, [fetchLatestGoal]);
+  
+  useEffect(() => { 
+    if (!isLoading && !isRefetching) {
+      if (!activeGoal && !isCreating && view === "dashboard") setView("input");
+      if (activeGoal && !isCreating && view !== "dashboard") setView("dashboard");
+      if (activeGoal) { setEditTitle(activeGoal.title); setEditDays(String(activeGoal.totalDays)); }
     }
-  }, [activeGoal]);
+  }, [activeGoal, isLoading, isRefetching, view, isCreating]);
 
-  if (isLoading) return <main className={`min-h-screen flex items-center justify-center p-6 ${themeClass}`}><p className="text-sm text-slate-400">正在同步云端记忆...</p></main>;
+  if (!mounted || (isLoading && !activeGoal && !isCreating)) return <div className="min-h-screen bg-[#F5F5F7]" />;
 
-  if (!activeGoal) {
-    return (
-      <main className={`min-h-screen flex flex-col items-center justify-center p-6 ${themeClass}`}>
-        <div className="w-full max-w-md bg-white p-10 rounded-[40px] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.05)] space-y-8 transition-all duration-500 ease-out">
-          <div className="space-y-3 text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">开启新旅程</h1>
-            <p className="text-sm text-slate-400 font-medium">设定一个你想长期坚持的目标</p>
-          </div>
+  if (view === "input") return (
+    <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
+      <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
+        <h1 className="text-2xl font-black text-center tracking-tighter">开启新旅程</h1>
+        <input value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="你想坚持什么？" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center border-2 focus:border-[#007AFF] outline-none" />
+        <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="计划天数" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center outline-none" />
+        <button onClick={async () => { setIsCreating(true); setView("analyzing"); const ops = await aiAnalyzeGoal(goalInput); setOptions(ops); setView("options"); }} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs">下一步</button>
+      </div>
+    </main>
+  );
 
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="group space-y-2">
-                <label className={`text-xs font-bold uppercase tracking-wider ml-1 transition-colors ${goalInput ? "text-blue-500" : "text-slate-400 group-focus-within:text-blue-500"}`}>你的目标</label>
-                <input type="text" value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="例如：每天阅读..." className="w-full bg-slate-50 border-none p-5 rounded-2xl focus:ring-2 focus:ring-blue-500/20 text-lg placeholder-slate-300 transition-all font-medium text-center outline-none" />
+  if (view === "analyzing") return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400">分析中</main>;
+
+  if (view === "options") return (
+    <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800 text-center">
+      <div className="w-full max-w-3xl space-y-10">
+        <h2 className="text-2xl font-black tracking-tighter">选一个方向</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {options.map((opt: any) => (
+            <button key={opt.id} onClick={() => { setFinalUnit(opt.unit); setFinalBase(opt.base); setView("confirm"); }} 
+              className="group relative bg-white h-64 p-8 rounded-[40px] border-2 border-slate-100 border-b-8 hover:border-[#007AFF] active:translate-y-1 transition-all text-center flex flex-col justify-between shadow-sm">
+              <div className="absolute top-6 left-6 font-black text-[10px] text-slate-300 uppercase">{opt.label}</div>
+              <div className="flex-1 flex flex-col justify-center items-center">
+                <div className="text-5xl font-black text-slate-900 tracking-tighter">{opt.base}</div>
+                <div className="text-xs font-bold text-slate-400 mt-2">以「{opt.unit}」计</div>
               </div>
-              <div className="group space-y-2">
-                <label className={`text-xs font-bold uppercase tracking-wider ml-1 transition-colors ${daysInput ? "text-blue-500" : "text-slate-400 group-focus-within:text-blue-500"}`}>计划坚持 (天)</label>
-                <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="例如：21" className="w-full bg-slate-50 border-none p-5 rounded-2xl focus:ring-2 focus:ring-blue-500/20 text-lg placeholder-slate-300 transition-all font-medium text-center outline-none appearance-none" />
-              </div>
-            </div>
+              <div className="text-[10px] font-bold text-slate-400 leading-tight">{opt.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
 
-            {createError ? <p className="text-xs text-red-500 text-center">{createError}</p> : null}
+  if (view === "confirm") return (
+    <main className="min-h-screen flex items-center justify-center p-6 font-mono text-slate-800">
+      <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
+        <h2 className="font-black text-xl text-center">确认细节</h2>
+        <div className="bg-slate-50 p-8 rounded-3xl space-y-6 font-bold border-2 border-slate-100">
+          <div className="flex justify-between items-center"><span>计量单位</span><input value={finalUnit} onChange={(e) => setFinalUnit(e.target.value)} className="w-24 text-right bg-transparent outline-none text-[#007AFF] border-b-2 border-[#007AFF] pb-1" /></div>
+          <div className="flex justify-between items-center"><span>每日基准</span><input type="number" value={finalBase} onChange={(e) => setFinalBase(Number(e.target.value))} className="w-24 text-right bg-transparent outline-none text-[#007AFF] border-b-2 border-[#007AFF] pb-1" /></div>
+        </div>
+        <button onClick={async () => { setView("dashboard"); await createGoal(goalInput, Number(daysInput), finalUnit, finalBase); setIsCreating(false); }} className="w-full py-5 bg-green-500 text-white rounded-2xl font-black border-b-4 border-green-800 tracking-widest uppercase text-xs">确认开启</button>
+      </div>
+    </main>
+  );
 
-            <button onClick={async () => {
-                const title = goalInput.trim();
-                if (!title) return;
-                const days = Math.max(1, Number.parseInt(daysInput, 10) || 21);
-                const res = await createGoal(title, days);
-                if (!res.ok) setCreateError(res.reason || "创建失败");
-              }} className="w-full py-5 bg-slate-900 text-white hover:bg-black rounded-2xl font-bold tracking-wide transition-all shadow-lg shadow-slate-900/20 active:scale-95 text-sm">
-              开始记录
+  const daysActive = getDaysActive(activeGoal?.startDate);
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
+      <div className="w-full max-w-lg bg-white rounded-[44px] shadow-xl flex flex-col border-b-8 border-slate-200 min-h-[720px] overflow-hidden">
+        
+        <header className="px-10 py-10 border-b-2 border-slate-50 relative flex justify-between items-start">
+          <div className="flex flex-col text-left max-w-[65%]">
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">当前目标</span>
+            {isEditing ? (
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="text-2xl font-black border-b-2 border-[#007AFF] outline-none pb-1 mt-1 bg-transparent w-full" />
+            ) : (
+              <h1 className="text-2xl font-black tracking-tighter mt-1 truncate">{activeGoal?.title}</h1>
+            )}
+            <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase mt-2 text-left hover:underline">
+              {isEditing ? "保存" : "修改"}
             </button>
           </div>
-        </div>
-      </main>
-    );
-  }
-
-  const daysActive = getDaysActive(activeGoal.startDate);
-
-  return (
-    <main className={`min-h-screen flex items-center justify-center p-4 ${themeClass} relative`}>
-      <div className="w-full max-w-md bg-white rounded-[44px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.08)] overflow-hidden border border-white/60 relative">
-        <header className="sticky top-0 z-10 flex items-start justify-between bg-white/80 p-8 pb-4 backdrop-blur-xl">
-          <div className="mr-4 flex-1 space-y-1 min-w-0">
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">你的目标</span>
-              {!isEditing && <button onClick={() => setIsEditing(true)} className="text-[10px] font-bold text-blue-400 hover:text-blue-600">[ 修改 ]</button>}
-            </div>
+          
+          <div className="flex flex-col text-right items-end min-w-[30%]">
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">完成进度</span>
             {isEditing ? (
-              <div className="space-y-2 pt-1">
-                <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="w-full rounded-xl border-none bg-slate-50 px-3 py-2 text-lg font-bold outline-none" />
-                <div className="flex items-center space-x-2">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">总天数:</span>
-                  <input type="number" value={editDays} onChange={(e) => setEditDays(e.target.value)} className="w-16 rounded-md border-none bg-slate-50 px-2 py-1 text-sm font-bold outline-none" />
-                </div>
+              <div className="flex items-center justify-end space-x-2 mt-1">
+                <span className="text-xs font-bold text-slate-400">总:</span>
+                <input type="number" value={editDays} onChange={(e) => setEditDays(e.target.value)} className="w-12 text-center font-black bg-slate-50 rounded-lg p-1 outline-none text-sm border-2 border-slate-100" />
               </div>
             ) : (
-              <h1 className="truncate text-xl font-bold tracking-tight text-slate-900">{activeGoal.title}</h1>
+              <div className="inline-block px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 mt-2">第 {daysActive} / {activeGoal?.totalDays} 天</div>
             )}
           </div>
-          <div className="shrink-0 flex flex-col items-end">
-            <span className="text-[10px] text-slate-400 font-bold uppercase">当前进度</span>
-            <div className="flex items-baseline space-x-1">
-              <span className="text-2xl font-bold text-slate-800 leading-none">{daysActive}</span>
-              <span className="text-sm font-bold text-slate-300">/ {activeGoal.totalDays}</span>
-            </div>
-          </div>
         </header>
-        <div className="px-6 pb-8">
-          {isEditing ? (
-            <div className="space-y-3 pt-6">
-              <button onClick={() => { updateGoal(editTitle, Number(editDays)); setIsEditing(false); }} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm">保存修改</button>
-              <button onClick={() => { setEditTitle(activeGoal.title); setEditDays(String(activeGoal.totalDays)); setIsEditing(false); }} className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-bold text-sm">取消</button>
-            </div>
-          ) : <PhaseController />}
-        </div>
+
+        <div className="flex-1 px-8 pb-12 overflow-y-auto"><PhaseController /></div>
       </div>
     </main>
   );
