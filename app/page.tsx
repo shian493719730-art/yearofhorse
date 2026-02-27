@@ -78,7 +78,7 @@ export default function HomePage() {
         <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-8">
           <div className="space-y-2 text-center">
             <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Identity identification</span>
-            <h1 className="text-2xl font-black tracking-tighter">申领你的代号</h1>
+            <h1 className="text-2xl font-black tracking-tighter">注册姓名与密码</h1>
           </div>
           <div className="space-y-4">
             <input 
@@ -91,7 +91,7 @@ export default function HomePage() {
               type="password"
               value={pinInput}
               onChange={(e) => { setPinInput(e.target.value); setAuthError(""); }}
-              placeholder="输入你的专属口令"
+              placeholder="请注册或者输入密码"
               className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all"
               onKeyDown={(e) => e.key === "Enter" && handleLogin()}
             />
@@ -125,7 +125,10 @@ export default function HomePage() {
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
         <h1 className="text-2xl font-black text-center tracking-tighter">开启新旅程</h1>
         <input value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="你想坚持什么？" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center border-2 focus:border-[#007AFF] outline-none" />
-        <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="计划天数" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center outline-none" />
+        <div className="w-full bg-slate-50 rounded-2xl flex items-center justify-center px-5 border-2 border-transparent focus-within:border-[#007AFF] transition-all">
+          <span className="font-black text-slate-500 mr-3">天</span>
+          <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="计划天数" className="w-full bg-transparent p-5 font-bold text-center outline-none" />
+        </div>
         <button onClick={async () => { setIsCreating(true); setView("analyzing"); const ops = await aiAnalyzeGoal(goalInput); setOptions(ops); setView("options"); }} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs">下一步</button>
       </div>
     </main>
