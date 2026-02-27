@@ -64,6 +64,16 @@ export default function PhaseController() {
   const outputPercent = clamp((actualDone / safeMaxLimit) * 100, 0, 100);
   const recLinePercent = clamp((clampedRec / safeMaxLimit) * 100, 0, 100);
 
+  const getStateTag = (energyValue: number, actualDoneValue: number) => {
+    const recommended = calculateRecommended(energyValue);
+    const clampedRecommended = clamp(recommended, 0.1, safeMaxLimit);
+
+    if (energyValue >= 100 && actualDoneValue >= safeMaxLimit) return "MAXED";
+    if (energyValue > 80 && actualDoneValue >= clampedRecommended) return "GOLDEN";
+    if (energyValue < 50 && actualDoneValue >= clampedRecommended * 0.85) return "RESILIENT";
+    return "DEFAULT";
+  };
+
   const isMaxed = energy >= 100 && actualDone >= safeMaxLimit;
   const isGolden = !isMaxed && energy > 80 && actualDone >= clampedRec;
   const isResilient = energy < 50 && actualDone >= clampedRec * 0.85;
@@ -78,6 +88,9 @@ export default function PhaseController() {
     if (type === "energy") { setEnergy(value); setEnergyTouched(true); }
     else { setActualDone(value); }
 
+    const nextEnergy = type === "energy" ? value : energy;
+    const nextActualDone = type === "output" ? value : actualDone;
+
     if (debounceTimer.current) clearTimeout(debounceTimer.current);
     debounceTimer.current = setTimeout(async () => {
       try {
@@ -86,7 +99,11 @@ export default function PhaseController() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: "LIVE_COMMENT",
-            payload: { title: activeGoal.title, energy: type === "energy" ? value : energy }
+            payload: {
+              title: activeGoal.title,
+              energy: nextEnergy,
+              stateTag: getStateTag(nextEnergy, nextActualDone)
+            }
           })
         }).then(r => r.json());
         if (res.result) setAiComment(res.result);
