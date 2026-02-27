@@ -101,6 +101,7 @@ export default function PhaseController() {
         <div className="space-y-3">
           <input type="range" min="0" max="100" step="1" value={energy} onChange={(e) => handleSliderChange("energy", Number(e.target.value))} className="range-thumb w-full h-8 bg-slate-100 rounded-full appearance-none" />
         </div>
+<<<<<<< HEAD
         <div className={`space-y-3 transition-all ${!energyTouched ? "opacity-30 grayscale pointer-events-none" : ""}`}>
           <input type="range" min="0" max={safeMaxLimit} step="0.1" value={actualDone} disabled={!energyTouched} onChange={(e) => handleSliderChange("output", Number(e.target.value))} className="range-thumb w-full h-8 bg-slate-100 rounded-full appearance-none" />
         </div>
@@ -114,6 +115,29 @@ export default function PhaseController() {
         disabled={isSuccess && !hasUnsavedChanges} 
         className={`w-full max-w-sm py-5 rounded-[40px] font-black text-sm transition-all border-b-4 ${isSuccess && !hasUnsavedChanges ? "bg-slate-200 text-slate-400" : "bg-[#007AFF] text-white active:translate-y-1 shadow-md border-black/10"}`}>
         {isSuccess && !hasUnsavedChanges ? "✅ 已保存" : "上传今日进度"}
+=======
+        <div className={`space-y-3 transition-all ${!energyTouched ? "opacity-30 grayscale pointer-events-none" : "opacity-100"}`}>
+          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">实际产出进度</span><span className="text-[10px] font-bold text-slate-300">{isDiscrete ? Math.round(actualDone) : actualDone} {unit}</span></div>
+          <input type="range" min="0" max={safeMaxLimit} step={sliderStep} value={actualDone} disabled={!energyTouched} onChange={(e) => handleSliderChange("output", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
+        </div>
+      </div>
+
+      {/* ✨ 移除 setTimeout，實現狀態鎖定 */}
+      <button onClick={() => { const p = getCurrentPhase(activeGoal.startDate); addDailyLog({ energyLevel: energy, actualDone, date: getTodayKey(), phase: p, note: aiComment }); setIsSuccess(true); }} 
+        disabled={isSuccess || !hasUnsavedChanges} 
+        className={`w-full max-w-sm py-5 rounded-[40px] font-black text-sm tracking-widest transition-all border-b-4 ${
+          isSuccess 
+            ? "cursor-default" 
+            : "active:translate-y-1 active:border-b-0"
+        } ${
+          isSuccess 
+            ? (isMaxed ? theme.btn + " border-pink-700/30 border-b-0 shadow-none" : "bg-slate-200 border-slate-300 text-slate-400 border-b-0 shadow-none") 
+            : hasUnsavedChanges || isMaxed 
+              ? theme.btn + " border-black/10 shadow-md" 
+              : "bg-slate-200 border-slate-300 text-slate-400"
+        }`}>
+        {isSuccess ? (isMaxed ? "恭喜" : "已保存") : "确认今日状态"}
+>>>>>>> parent of a5a8282 (UI: final polish on wording and layout)
       </button>
     </div>
   );
