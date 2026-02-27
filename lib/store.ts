@@ -28,26 +28,68 @@ const safeNum = (val: any) => { const n = Number(val); return isNaN(n) ? 0 : n; 
 
 export const useGoalStore = create<any>((set: any, get: any) => ({
   activeGoal: null,
+  currentUser: null, // 新增：当前用户的代号
   isLoading: false,
   isRefetching: false,
   weeklyReport: null,
   dailyReport: null,
 
+  // 1. 初始化用户：从浏览器缓存读取代号
+  initUser: () => {
+    const saved = localStorage.getItem('philosopher_handle');
+    if (saved) {
+      set({ currentUser: saved });
+      get().fetchLatestGoal();
+    }
+  },
+
+  // 2. 登录/注册逻辑：申领代号
+  login: async (handle: string) => {
+    if (!handle) return;
+    
+    // 检查代号是否存在
+    const { data: profile } = await supabase.from('profiles').select('handle').eq('handle', handle).maybeSingle();
+    
+    if (!profile) {
+      // 如果代号没人用，就帮他占个坑
+      const { error: regError } = await supabase.from('profiles').insert([{ handle }]);
+      if (regError) {
+        alert("代号注册失败，可能已被占用");
+        return;
+      }
+    }
+
+    localStorage.setItem('philosopher_handle', handle);
+    set({ currentUser: handle });
+    get().fetchLatestGoal();
+  },
+
   fetchLatestGoal: async (silent = false) => {
+    const { currentUser } = get();
+    if (!currentUser) return; // 没登录不查数据
+
     if (silent) set({ isRefetching: true });
     else set({ isLoading: true });
+    
     try {
-      const { data, error } = await supabase.from('goals').select('*, daily_logs(*)').eq('is_active', true).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      // ✨ 关键点：增加 .eq('user_handle', currentUser) 过滤，只看自己的目标
+      const { data, error } = await supabase.from('goals')
+        .select('*, daily_logs(*)')
+        .eq('user_handle', currentUser)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1).maybeSingle();
+
       if (data && !error) {
-        const today = getTodayKey();
         const cleanLogs = (data.daily_logs || []).map((log: any) => ({
           ...log,
           energyLevel: safeNum(log.energy),
           actualDone: safeNum(log.actual_done),
           note: String(log.ai_feedback || "")
         })).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
         set({ activeGoal: { ...data, dailyBase: data.base_task_value, unitName: data.unit_name, logs: cleanLogs, startDate: data.start_date, totalDays: data.total_days } });
-      } else if (!data) {
+      } else {
         set({ activeGoal: null });
       }
     } catch (e) {}
@@ -64,12 +106,17 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
   },
 
   createGoal: async (title: string, totalDays: number, unit: string, base: number) => {
+    const { currentUser } = get();
     try {
-      await supabase.from('goals').update({ is_active: false }).eq('is_active', true);
+      // ✨ 关键点：只把属于当前用户的旧目标设为不活跃
+      await supabase.from('goals').update({ is_active: false }).eq('user_handle', currentUser).eq('is_active', true);
+      
       const { error } = await supabase.from('goals').insert([{
         title, total_days: totalDays, unit_name: unit, base_task_value: base,
-        start_date: new Date().toISOString(), is_active: true
+        start_date: new Date().toISOString(), is_active: true,
+        user_handle: currentUser // 注入身份
       }]);
+      
       if (error) return { ok: false };
       await get().fetchLatestGoal();
       return { ok: true };
@@ -77,20 +124,26 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
   },
 
   updateGoal: async (title: string, totalDays: number) => {
-    const { activeGoal } = get();
-    if (!activeGoal) return false;
-    const { error } = await supabase.from('goals').update({ title, total_days: totalDays }).eq('id', activeGoal.id);
+    const { activeGoal, currentUser } = get();
+    if (!activeGoal || !currentUser) return false;
+    // 增加 user_handle 校验
+    const { error } = await supabase.from('goals').update({ title, total_days: totalDays }).eq('id', activeGoal.id).eq('user_handle', currentUser);
     if (error) return false;
     await get().fetchLatestGoal(true);
     return true;
   },
 
   addDailyLog: async (log: any) => {
-    const { activeGoal } = get();
-    if (!activeGoal) return false;
+    const { activeGoal, currentUser } = get();
+    if (!activeGoal || !currentUser) return false;
     const { error } = await supabase.from('daily_logs').insert([{
-      goal_id: activeGoal.id, date: log.date || getTodayKey(),
-      phase: log.phase, energy: safeNum(log.energyLevel), actual_done: String(log.actualDone), ai_feedback: String(log.note || "")
+      goal_id: activeGoal.id, 
+      user_handle: currentUser, // 注入身份
+      date: log.date || getTodayKey(),
+      phase: log.phase, 
+      energy: safeNum(log.energyLevel), 
+      actual_done: String(log.actualDone), 
+      ai_feedback: String(log.note || "")
     }]);
     if (error) return false;
     await get().fetchLatestGoal(true);

@@ -6,10 +6,16 @@ import { useGoalStore, getDaysActive } from "@/lib/store";
 
 export default function HomePage() {
   const store = useGoalStore();
-  const { activeGoal, isLoading, isRefetching, fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal } = store;
+  const { 
+    activeGoal, isLoading, isRefetching, 
+    fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal,
+    currentUser, login, initUser // 从 store 引入新功能
+  } = store;
+
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<any>("dashboard");
   
+  const [handleInput, setHandleInput] = useState(""); // 登录输入框
   const [goalInput, setGoalInput] = useState("");
   const [daysInput, setDaysInput] = useState("21");
   const [options, setOptions] = useState<any[]>([]);
@@ -22,18 +28,64 @@ export default function HomePage() {
   
   const [isCreating, setIsCreating] = useState(false);
 
-  useEffect(() => { setMounted(true); fetchLatestGoal(); }, [fetchLatestGoal]);
-  
+  // 1. 初始化用户身份
   useEffect(() => { 
-    if (!isLoading && !isRefetching) {
+    setMounted(true); 
+    initUser(); // 先找我是谁
+  }, [initUser]);
+  
+  // 2. 状态机：控制什么时候该显示什么界面
+  useEffect(() => { 
+    if (!isLoading && !isRefetching && currentUser) {
       if (!activeGoal && !isCreating && view === "dashboard") setView("input");
       if (activeGoal && !isCreating && view !== "dashboard") setView("dashboard");
-      if (activeGoal) { setEditTitle(activeGoal.title); setEditDays(String(activeGoal.totalDays)); }
+      if (activeGoal) { 
+        setEditTitle(activeGoal.title); 
+        setEditDays(String(activeGoal.totalDays)); 
+      }
     }
-  }, [activeGoal, isLoading, isRefetching, view, isCreating]);
+  }, [activeGoal, isLoading, isRefetching, view, isCreating, currentUser]);
 
-  if (!mounted || (isLoading && !activeGoal && !isCreating)) return <div className="min-h-screen bg-[#F5F5F7]" />;
+  if (!mounted) return <div className="min-h-screen bg-[#F5F5F7]" />;
 
+  // 🚪 场景 A：身份申领（登录页）
+  if (!currentUser) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
+        <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-8">
+          <div className="space-y-2 text-center">
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Identity identification</span>
+            <h1 className="text-2xl font-black tracking-tighter">申领你的代号</h1>
+          </div>
+          <div className="space-y-4">
+            <input 
+              value={handleInput} 
+              onChange={(e) => setHandleInput(e.target.value)} 
+              placeholder="例如：Neo_2026" 
+              className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all" 
+            />
+            <button 
+              onClick={() => handleInput && login(handleInput)} 
+              disabled={!handleInput}
+              className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 disabled:opacity-50 transition-all"
+            >
+              进入系统
+            </button>
+          </div>
+          <p className="text-[9px] text-slate-400 text-center leading-relaxed px-6">
+            * 代号是你找回数据的唯一凭证。<br/>建议使用姓名拼音或只有你知道的唯一字符。
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // 加载中状态（已登录但在抓取数据）
+  if (isLoading && !activeGoal && !isCreating) {
+    return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400">加载逻辑中...</main>;
+  }
+
+  // 🏠 场景 B：输入目标
   if (view === "input") return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
@@ -45,8 +97,10 @@ export default function HomePage() {
     </main>
   );
 
-  if (view === "analyzing") return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400">分析中</main>;
+  // 场景 C：分析中
+  if (view === "analyzing") return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400 font-mono">逻辑解构中...</main>;
 
+  // 场景 D：选项分歧
   if (view === "options") return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800 text-center">
       <div className="w-full max-w-3xl space-y-10">
@@ -68,6 +122,7 @@ export default function HomePage() {
     </main>
   );
 
+  // 场景 E：最终确认
   if (view === "confirm") return (
     <main className="min-h-screen flex items-center justify-center p-6 font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
@@ -81,6 +136,7 @@ export default function HomePage() {
     </main>
   );
 
+  // 🏁 场景 F：主看板
   const daysActive = getDaysActive(activeGoal?.startDate);
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
@@ -94,9 +150,13 @@ export default function HomePage() {
             ) : (
               <h1 className="text-2xl font-black tracking-tighter mt-1 truncate">{activeGoal?.title}</h1>
             )}
-            <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase mt-2 text-left hover:underline">
-              {isEditing ? "保存" : "修改"}
-            </button>
+            <div className="flex space-x-4 items-center mt-2">
+              <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase hover:underline">
+                {isEditing ? "保存" : "修改"}
+              </button>
+              {/* 显示当前身份，增加归属感 */}
+              <span className="text-[9px] font-black text-slate-300 uppercase">用户: {currentUser}</span>
+            </div>
           </div>
           
           <div className="flex flex-col text-right items-end min-w-[30%]">
