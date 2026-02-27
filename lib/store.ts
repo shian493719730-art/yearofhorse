@@ -32,7 +32,7 @@ const safeNum = (val: any) => { const n = Number(val); return isNaN(n) ? 0 : n; 
 
 export const useGoalStore = create<any>((set: any, get: any) => ({
   activeGoal: null,
-  currentUser: null,
+  currentUser: null, 
   isLoading: false,
   isRefetching: false,
   weeklyReport: null,
@@ -52,7 +52,7 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
     if (!profile) {
       const { error: regError } = await supabase.from('profiles').insert([{ handle }]);
       if (regError) {
-        alert("代号注册失败");
+        alert("代号注册失败，可能已被占用");
         return;
       }
     }
@@ -80,7 +80,7 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
           ...log,
           energyLevel: safeNum(log.energy),
           actualDone: safeNum(log.actual_done),
-          // 🛠️ 还原：从数据库读数字，映射回文案给代码用
+          // 🛠️ 还原：从数据库读数字，映射回文案
           phase: REVERSE_PHASE_MAP[log.phase] || "适应期",
           note: String(log.ai_feedback || "")
         })).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -130,7 +130,7 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
     const { activeGoal, currentUser } = get();
     if (!activeGoal || !currentUser) return false;
 
-    // 🛠️ 转换：将“适应期”等文字转为数据库要求的整数
+    // 🛠️ 关键修复：发送整数 phase
     const phaseInt = PHASE_MAP[log.phase] || 1;
 
     const dbPayload = {
@@ -143,15 +143,11 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
       ai_feedback: String(log.note || "")
     };
 
-    // 使用 upsert 实现覆盖保存，解决 400 重复打卡错误
     const { error } = await supabase
       .from('daily_logs')
       .upsert([dbPayload], { onConflict: 'goal_id,user_handle,date' });
 
-    if (error) {
-      console.error("Save Error:", error.message);
-      return false;
-    }
+    if (error) return false;
     await get().fetchLatestGoal(true);
     return true;
   }
