@@ -4,6 +4,22 @@ import { NextResponse } from 'next/server';
 export const maxDuration = 60; 
 export const dynamic = 'force-dynamic';
 
+const getReadableAiError = (message: string) => {
+  if (!message) return "AI 服务暂时不可用，请稍后重试";
+  if (message.includes("AI_API_KEY")) return "AI_API_KEY 未配置";
+  if (message.includes("请求格式无效")) return "AI 请求格式无效";
+  if (message.includes("AI返回数据为空")) return "AI 服务返回为空";
+  if (message.includes("JSON解析失败")) return "AI 返回格式异常";
+  if (message.includes("401")) return "AI 服务鉴权失败";
+  if (message.includes("402")) return "AI 服务账户余额不足";
+  if (message.includes("429")) return "AI 请求过多或额度已用尽";
+  if (message.includes("500")) return "AI 服务端异常，请稍后重试";
+  if (message.includes("503")) return "AI 服务暂时不可用，请稍后重试";
+  if (message.includes("504")) return "AI 服务超时，请稍后重试";
+  if (message.includes("fetch failed")) return "网络请求失败，请检查服务状态";
+  return "AI 服务调用失败，请稍后重试";
+};
+
 export async function POST(req: Request) {
   let requestType = ""; 
 
@@ -94,6 +110,8 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("API Error Details:", error);
+    const errorMessage = error?.message || "未知错误";
+    const readableError = getReadableAiError(errorMessage);
     
     // 🚨 关键修改：把具体的错误原因返回给前端卡片
     if (requestType === "GENERATE_METRICS") {
@@ -102,10 +120,10 @@ export async function POST(req: Request) {
             unit: "错误", 
             value: 0, 
             label: "系统报错", 
-            desc: error.message || "未知错误"  // 这里会显示真正的病因
+            desc: readableError
           }
         ]);
     }
-    return NextResponse.json({ result: "系统维护中" });
+    return NextResponse.json({ result: readableError, detail: errorMessage });
   }
 }
