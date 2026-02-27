@@ -1,101 +1,152 @@
-"use client";
+import { create } from 'zustand';
+import { supabase } from './supabase';
 
-import { useEffect, useState } from "react";
-import PhaseController from "@/components/PhaseController";
-import { useGoalStore, getDaysActive } from "@/lib/store";
+export const getTodayKey = () => new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
 
-export default function HomePage() {
-  const store = useGoalStore();
-  const { 
-    activeGoal, isLoading, isRefetching, 
-    fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal,
-    currentUser, login, initUser 
-  } = store;
+export const getDaysActive = (startDate: string) => {
+  if (!startDate) return 0;
+  const start = new Date(startDate);
+  const now = new Date();
+  const diffTime = Math.abs(now.getTime() - start.getTime());
+  return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+};
 
-  const [mounted, setMounted] = useState(false);
-  const [view, setView] = useState<any>("dashboard");
-  const [handleInput, setHandleInput] = useState("");
-  const [goalInput, setGoalInput] = useState("");
-  const [daysInput, setDaysInput] = useState("21");
-  const [options, setOptions] = useState<any[]>([]);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDays, setEditDays] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
+export const getTodayLog = (goal: any) => {
+  if (!goal || !goal.logs) return null;
+  const today = getTodayKey();
+  return goal.logs.find((l: any) => l.date === today) || null;
+};
 
-  useEffect(() => { 
-    setMounted(true); 
-    initUser();
-  }, [initUser]);
-  
-  useEffect(() => { 
-    if (!isLoading && !isRefetching && currentUser) {
-      if (!activeGoal && !isCreating && view === "dashboard") setView("input");
-      if (activeGoal && !isCreating && view !== "dashboard") setView("dashboard");
-      if (activeGoal) { 
-        setEditTitle(activeGoal.title); 
-        setEditDays(String(activeGoal.totalDays)); 
+export const getCurrentPhase = (startDate: string) => {
+  const days = getDaysActive(startDate);
+  if (days <= 3) return "适应期";
+  if (days <= 10) return "稳定期";
+  return "深水区";
+};
+
+const safeNum = (val: any) => { const n = Number(val); return isNaN(n) ? 0 : n; };
+
+export const useGoalStore = create<any>((set: any, get: any) => ({
+  activeGoal: null,
+  currentUser: null, // 新增：当前用户的代号
+  isLoading: false,
+  isRefetching: false,
+  weeklyReport: null,
+  dailyReport: null,
+
+  // 1. 初始化用户：从浏览器缓存读取代号
+  initUser: () => {
+    const saved = localStorage.getItem('philosopher_handle');
+    if (saved) {
+      set({ currentUser: saved });
+      get().fetchLatestGoal();
+    }
+  },
+
+  // 2. 登录/注册逻辑：申领代号
+  login: async (handle: string) => {
+    if (!handle) return;
+    
+    // 检查代号是否存在
+    const { data: profile } = await supabase.from('profiles').select('handle').eq('handle', handle).maybeSingle();
+    
+    if (!profile) {
+      // 如果代号没人用，就帮他占个坑
+      const { error: regError } = await supabase.from('profiles').insert([{ handle }]);
+      if (regError) {
+        alert("代号注册失败，可能已被占用");
+        return;
       }
     }
-  }, [activeGoal, isLoading, isRefetching, view, isCreating, currentUser]);
 
-  if (!mounted) return <div className="min-h-screen bg-[#F5F5F7]" />;
+    localStorage.setItem('philosopher_handle', handle);
+    set({ currentUser: handle });
+    get().fetchLatestGoal();
+  },
 
-  if (!currentUser) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
-        <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-8">
-          <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-black tracking-tighter">申领你的代号</h1>
-          </div>
-          <div className="space-y-4">
-            <input value={handleInput} onChange={(e) => setHandleInput(e.target.value)} placeholder="例如：Neo_2026" className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none" />
-            <button onClick={() => handleInput && login(handleInput)} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs">进入系统</button>
-          </div>
-        </div>
-      </main>
-    );
+  fetchLatestGoal: async (silent = false) => {
+    const { currentUser } = get();
+    if (!currentUser) return; // 没登录不查数据
+
+    if (silent) set({ isRefetching: true });
+    else set({ isLoading: true });
+    
+    try {
+      // ✨ 关键点：增加 .eq('user_handle', currentUser) 过滤，只看自己的目标
+      const { data, error } = await supabase.from('goals')
+        .select('*, daily_logs(*)')
+        .eq('user_handle', currentUser)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1).maybeSingle();
+
+      if (data && !error) {
+        const cleanLogs = (data.daily_logs || []).map((log: any) => ({
+          ...log,
+          energyLevel: safeNum(log.energy),
+          actualDone: safeNum(log.actual_done),
+          note: String(log.ai_feedback || "")
+        })).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        
+        set({ activeGoal: { ...data, dailyBase: data.base_task_value, unitName: data.unit_name, logs: cleanLogs, startDate: data.start_date, totalDays: data.total_days } });
+      } else {
+        set({ activeGoal: null });
+      }
+    } catch (e) {}
+    set({ isLoading: false, isRefetching: false });
+  },
+
+  aiAnalyzeGoal: async (title: string) => {
+    await new Promise(r => setTimeout(r, 1500));
+    return [
+      { id: 'time', label: '沉浸', unit: '小时', base: 4, desc: '侧重专注深度的积累' },
+      { id: 'output', label: '量化', unit: title.includes('学') ? '页' : '组', base: title.includes('学') ? 20 : 10, desc: '侧重具体结果的交付' },
+      { id: 'burst', label: '爆发', unit: '次', base: 5, desc: '侧重间歇性高能投入' }
+    ];
+  },
+
+  createGoal: async (title: string, totalDays: number, unit: string, base: number) => {
+    const { currentUser } = get();
+    try {
+      // ✨ 关键点：只把属于当前用户的旧目标设为不活跃
+      await supabase.from('goals').update({ is_active: false }).eq('user_handle', currentUser).eq('is_active', true);
+      
+      const { error } = await supabase.from('goals').insert([{
+        title, total_days: totalDays, unit_name: unit, base_task_value: base,
+        start_date: new Date().toISOString(), is_active: true,
+        user_handle: currentUser // 注入身份
+      }]);
+      
+      if (error) return { ok: false };
+      await get().fetchLatestGoal();
+      return { ok: true };
+    } catch (e) { return { ok: false }; }
+  },
+
+  updateGoal: async (title: string, totalDays: number) => {
+    const { activeGoal, currentUser } = get();
+    if (!activeGoal || !currentUser) return false;
+    // 增加 user_handle 校验
+    const { error } = await supabase.from('goals').update({ title, total_days: totalDays }).eq('id', activeGoal.id).eq('user_handle', currentUser);
+    if (error) return false;
+    await get().fetchLatestGoal(true);
+    return true;
+  },
+
+  addDailyLog: async (log: any) => {
+    const { activeGoal, currentUser } = get();
+    if (!activeGoal || !currentUser) return false;
+    const { error } = await supabase.from('daily_logs').insert([{
+      goal_id: activeGoal.id, 
+      user_handle: currentUser, // 注入身份
+      date: log.date || getTodayKey(),
+      phase: log.phase, 
+      energy: safeNum(log.energyLevel), 
+      actual_done: String(log.actualDone), 
+      ai_feedback: String(log.note || "")
+    }]);
+    if (error) return false;
+    await get().fetchLatestGoal(true);
+    return true;
   }
-
-  if (view === "input") return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
-      <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
-        <h1 className="text-2xl font-black text-center tracking-tighter">开启新旅程</h1>
-        <input value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="请输入目标" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center border-2 focus:border-[#007AFF] outline-none" />
-        <div className="relative flex items-center">
-          <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center outline-none" />
-          <span className="absolute right-6 font-black text-slate-400">天</span>
-        </div>
-        <button onClick={async () => { setIsCreating(true); setView("analyzing"); const ops = await aiAnalyzeGoal(goalInput); setOptions(ops); setView("options"); }} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest text-xs uppercase">下一步</button>
-      </div>
-    </main>
-  );
-
-  const daysActive = getDaysActive(activeGoal?.startDate);
-  const getTitleFontSize = (text: string = "") => {
-    if (text.length > 15) return "text-base";
-    if (text.length > 10) return "text-lg";
-    return "text-2xl";
-  };
-
-  return (
-    <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
-      <div className="w-full max-w-lg bg-white rounded-[44px] shadow-xl flex flex-col border-b-8 border-slate-200 min-h-[720px] overflow-hidden">
-        <header className="px-10 py-10 border-b-2 border-slate-50 relative flex justify-between items-start">
-          <div className="flex flex-col text-left max-w-[65%] overflow-hidden">
-            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">当前目标</span>
-            <h1 className={`${getTitleFontSize(activeGoal?.title)} font-black tracking-tighter mt-1`}>{activeGoal?.title}</h1>
-            <div className="flex space-x-4 items-center mt-2">
-              <span className="text-[9px] font-black text-slate-300 uppercase">用户: {currentUser}</span>
-            </div>
-          </div>
-          <div className="flex flex-col text-right items-end min-w-[30%]">
-            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">目标天数</span>
-            <div className="inline-block px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 mt-2">第 {daysActive} / {activeGoal?.totalDays} 天</div>
-          </div>
-        </header>
-        <div className="flex-1 px-8 pb-12 overflow-y-auto"><PhaseController /></div>
-      </div>
-    </main>
-  );
-}
+}));
