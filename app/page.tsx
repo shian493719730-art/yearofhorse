@@ -14,28 +14,25 @@ export default function HomePage() {
 
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<any>("dashboard");
-  
   const [handleInput, setHandleInput] = useState("");
   const [goalInput, setGoalInput] = useState("");
   const [daysInput, setDaysInput] = useState("21");
   const [options, setOptions] = useState<any[]>([]);
   const [finalUnit, setFinalUnit] = useState("");
   const [finalBase, setFinalBase] = useState(4);
-
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDays, setEditDays] = useState("");
-  
   const [isCreating, setIsCreating] = useState(false);
 
-  // 🛠 修复点 1: 刷新后立刻抓取数据
+  // 1. 初始化：AI 自动找回身份和同步数据库进度
   useEffect(() => { 
     setMounted(true); 
-    const loadData = async () => {
+    const syncData = async () => {
       await initUser();
-      await fetchLatestGoal(); // 强制刷新数据
+      await fetchLatestGoal(); 
     };
-    loadData();
+    syncData();
   }, [initUser, fetchLatestGoal]);
   
   useEffect(() => { 
@@ -51,7 +48,6 @@ export default function HomePage() {
 
   if (!mounted) return <div className="min-h-screen bg-[#F5F5F7]" />;
 
-  // 🚪 场景 A：身份申领
   if (!currentUser) {
     return (
       <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
@@ -62,19 +58,14 @@ export default function HomePage() {
           </div>
           <div className="space-y-4">
             <input value={handleInput} onChange={(e) => setHandleInput(e.target.value)} placeholder="例如：Neo_2026" className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all" />
-            <button onClick={() => handleInput && login(handleInput)} disabled={!handleInput} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 disabled:opacity-50 transition-all">进入系统</button>
+            <button onClick={() => handleInput && login(handleInput)} disabled={!handleInput} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 transition-all">进入系统</button>
           </div>
-          <p className="text-[9px] text-slate-400 text-center leading-relaxed px-6">* 代号是你找回数据的唯一凭证。<br/>建议使用姓名拼音或只有你知道的唯一字符。</p>
         </div>
       </main>
     );
   }
 
-  if (isLoading && !activeGoal && !isCreating) {
-    return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400">加载逻辑中...</main>;
-  }
-
-  // 🏠 场景 B：输入目标
+  // 开启新旅程弹窗
   if (view === "input") return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
@@ -89,45 +80,8 @@ export default function HomePage() {
     </main>
   );
 
-  if (view === "analyzing") return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400 font-mono">逻辑解构中...</main>;
-
-  if (view === "options") return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800 text-center">
-      <div className="w-full max-w-3xl space-y-10">
-        <h2 className="text-2xl font-black tracking-tighter">选一个方向</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {options.map((opt: any) => (
-            <button key={opt.id} onClick={() => { setFinalUnit(opt.unit); setFinalBase(opt.base); setView("confirm"); }} className="group relative bg-white h-64 p-8 rounded-[40px] border-2 border-slate-100 border-b-8 hover:border-[#007AFF] active:translate-y-1 transition-all text-center flex flex-col justify-between shadow-sm">
-              <div className="absolute top-6 left-6 font-black text-[10px] text-slate-300 uppercase">{opt.label}</div>
-              <div className="flex-1 flex flex-col justify-center items-center">
-                <div className="text-5xl font-black text-slate-900 tracking-tighter">{opt.base}</div>
-                <div className="text-xs font-bold text-slate-400 mt-2">以「{opt.unit}」计</div>
-              </div>
-              <div className="text-[10px] font-bold text-slate-400 leading-tight">{opt.desc}</div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </main>
-  );
-
-  if (view === "confirm") return (
-    <main className="min-h-screen flex items-center justify-center p-6 font-mono text-slate-800">
-      <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
-        <h2 className="font-black text-xl text-center">确认细节</h2>
-        <div className="bg-slate-50 p-8 rounded-3xl space-y-6 font-bold border-2 border-slate-100">
-          <div className="flex justify-between items-center"><span>计量单位</span><input value={finalUnit} onChange={(e) => setFinalUnit(e.target.value)} className="w-24 text-right bg-transparent outline-none text-[#007AFF] border-b-2 border-[#007AFF] pb-1" /></div>
-          <div className="flex justify-between items-center"><span>每日基准</span><input type="number" value={finalBase} onChange={(e) => setFinalBase(Number(e.target.value))} className="w-24 text-right bg-transparent outline-none text-[#007AFF] border-b-2 border-[#007AFF] pb-1" /></div>
-        </div>
-        <button onClick={async () => { setView("dashboard"); await createGoal(goalInput, Number(daysInput), finalUnit, finalBase); setIsCreating(false); }} className="w-full py-5 bg-green-500 text-white rounded-2xl font-black border-b-4 border-green-800 tracking-widest uppercase text-xs">确认开启</button>
-      </div>
-    </main>
-  );
-
-  // 🏁 场景 F：主看板
   const daysActive = getDaysActive(activeGoal?.startDate);
-  
-  // 🛠 修复点 2: 标题字号缩放逻辑
+  // 需求：字体跟随字数缩放
   const getTitleFontSize = (text: string = "") => {
     if (text.length > 15) return "text-base";
     if (text.length > 10) return "text-lg";
@@ -138,14 +92,12 @@ export default function HomePage() {
     <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white rounded-[44px] shadow-xl flex flex-col border-b-8 border-slate-200 min-h-[720px] overflow-hidden">
         <header className="px-10 py-10 border-b-2 border-slate-50 relative flex justify-between items-start">
-          <div className="flex flex-col text-left max-w-[65%]">
+          <div className="flex flex-col text-left max-w-[65%] overflow-hidden">
             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">当前目标</span>
             {isEditing ? (
               <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="text-xl font-black border-b-2 border-[#007AFF] outline-none pb-1 mt-1 bg-transparent w-full" />
             ) : (
-              <h1 className={`${getTitleFontSize(activeGoal?.title)} font-black tracking-tighter mt-1 transition-all duration-300`}>
-                {activeGoal?.title}
-              </h1>
+              <h1 className={`${getTitleFontSize(activeGoal?.title)} font-black tracking-tighter mt-1 transition-all`}>{activeGoal?.title}</h1>
             )}
             <div className="flex space-x-4 items-center mt-2">
               <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase hover:underline">{isEditing ? "保存" : "修改"}</button>
@@ -157,7 +109,6 @@ export default function HomePage() {
             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">目标天数</span>
             {isEditing ? (
               <div className="flex items-center justify-end space-x-2 mt-1">
-                <span className="text-xs font-bold text-slate-400">总:</span>
                 <input type="number" value={editDays} onChange={(e) => setEditDays(e.target.value)} className="w-12 text-center font-black bg-slate-50 rounded-lg p-1 outline-none text-sm border-2 border-slate-100" />
               </div>
             ) : (
