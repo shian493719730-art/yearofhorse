@@ -24,6 +24,10 @@ export const getCurrentPhase = (startDate: string) => {
   return "深水区";
 };
 
+// 🛠️ 核心映射：解决数据库 phase 字段只收整数的问题
+const PHASE_MAP: Record<string, number> = { "适应期": 1, "稳定期": 2, "深水区": 3 };
+const REVERSE_PHASE_MAP: Record<number, string> = { 1: "适应期", 2: "稳定期", 3: "深水区" };
+
 const safeNum = (val: any) => { const n = Number(val); return isNaN(n) ? 0 : n; };
 
 export const useGoalStore = create<any>((set: any, get: any) => ({
@@ -48,7 +52,7 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
     if (!profile) {
       const { error: regError } = await supabase.from('profiles').insert([{ handle }]);
       if (regError) {
-        alert("代号注册失败，可能已被占用");
+        alert("代号注册失败");
         return;
       }
     }
@@ -76,6 +80,8 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
           ...log,
           energyLevel: safeNum(log.energy),
           actualDone: safeNum(log.actual_done),
+          // 🛠️ 还原：从数据库读数字，映射回文案给代码用
+          phase: REVERSE_PHASE_MAP[log.phase] || "适应期",
           note: String(log.ai_feedback || "")
         })).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
         
@@ -124,18 +130,20 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
     const { activeGoal, currentUser } = get();
     if (!activeGoal || !currentUser) return false;
 
-    // 映射：将代码中的驼峰键名 转换为 数据库中的下划线键名
+    // 🛠️ 转换：将“适应期”等文字转为数据库要求的整数
+    const phaseInt = PHASE_MAP[log.phase] || 1;
+
     const dbPayload = {
       goal_id: activeGoal.id, 
       user_handle: currentUser,
       date: log.date || getTodayKey(),
-      phase: log.phase, 
-      energy: safeNum(log.energyLevel),       // 对应数据库列名 energy
-      actual_done: safeNum(log.actualDone),   // 对应数据库列名 actual_done
-      ai_feedback: String(log.note || "")     // 对应数据库列名 ai_feedback
+      phase: phaseInt, 
+      energy: safeNum(log.energyLevel), 
+      actual_done: safeNum(log.actualDone), 
+      ai_feedback: String(log.note || "")
     };
 
-    // 使用 upsert 替代 insert，实现覆盖保存，解决 400 重复主键错误
+    // 使用 upsert 实现覆盖保存，解决 400 重复打卡错误
     const { error } = await supabase
       .from('daily_logs')
       .upsert([dbPayload], { onConflict: 'goal_id,user_handle,date' });
