@@ -21,46 +21,33 @@ export default function PhaseController() {
 
   useEffect(() => { setMounted(true); }, []);
 
-  // 🛠 刷新同步记忆：刷新后自动归位
+  // 断电记忆：刷新后自动归位
   useEffect(() => {
     if (todayLog && !hasUnsavedChanges) {
-      setEnergy(todayLog.energyLevel || 50);
-      setActualDone(todayLog.actualDone || 0);
+      setEnergy(todayLog.energy || 50);
+      setActualDone(todayLog.actual_done || 0);
       setEnergyTouched(true);
-      setAiComment(todayLog.note || todayLog.aiFeedback || "");
+      setAiComment(todayLog.ai_feedback || "");
       setIsSuccess(true);
     }
   }, [todayLog, hasUnsavedChanges]);
 
-  // 🤖 AI 智能动态基准：保证整体目标完成度
+  // AI 智能动态基准
   const dynamicBase = useMemo(() => {
     if (!activeGoal) return 4;
     const totalGoal = (activeGoal.totalDays || 21) * (activeGoal.dailyBase || 4);
-    const totalFinished = (activeGoal.logs || []).reduce((sum: number, log: any) => sum + (log.actualDone || 0), 0);
+    const totalFinished = (activeGoal.logs || []).reduce((sum: number, log: any) => sum + (log.actual_done || 0), 0);
     const daysPassed = getDaysActive(activeGoal.startDate);
     const remainingDays = Math.max(1, (activeGoal.totalDays || 21) - daysPassed + 1);
-    
-    // 如果之前做少了，这个值会自动提高，帮用户“追赶进度”
     return Math.max(0.1, (totalGoal - totalFinished) / remainingDays);
   }, [activeGoal]);
 
-  const unit = activeGoal?.unitName || "单位";
-  const isDiscrete = ["次", "组", "个", "页"].includes(unit);
-  const safeMaxLimit = isDiscrete ? Math.ceil(dynamicBase * MAX_MULT) : dynamicBase * MAX_MULT;
-  const sliderStep = isDiscrete ? 1 : 0.01;
-
-  const calculateRecommended = (e: number) => {
-    if (e <= 50) return dynamicBase * Math.pow(e / 50, 2.5);
-    const ratio = (e - 50) / 50;
-    const val = dynamicBase + (dynamicBase * 0.5 - 0.3) * Math.pow(ratio, 0.3);
-    return isDiscrete ? Math.round(val) : val;
-  };
-
-  const recommendedTask = calculateRecommended(energy);
+  const safeMaxLimit = dynamicBase * MAX_MULT;
+  const recommendedTask = energy <= 50 ? dynamicBase * Math.pow(energy/50, 2.5) : dynamicBase + (dynamicBase*0.2)*Math.pow((energy-50)/50, 0.3);
   const recLinePercent = clamp((recommendedTask / safeMaxLimit) * 100, 0, 100);
   const outputPercent = clamp((actualDone / safeMaxLimit) * 100, 0, 100);
 
-  // ✨ 炫彩：能量 >= 95%
+  // ✨ 炫彩门槛：95%
   const isMaxed = energy >= 95 && actualDone >= (safeMaxLimit * 0.95);
   const isGolden = !isMaxed && energy > 80 && actualDone >= recommendedTask;
   const isResilient = energy < 50 && actualDone >= (recommendedTask * 0.85);
@@ -83,11 +70,7 @@ export default function PhaseController() {
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
-          body: JSON.stringify({ 
-            title: activeGoal.title, 
-            energy: type === "energy" ? value : energy,
-            isCatchingUp: dynamicBase > (activeGoal.dailyBase || 4)
-          })
+          body: JSON.stringify({ title: activeGoal.title, energy: type === "energy" ? value : energy })
         }).then(r => r.json());
         if (res.result && !res.result.includes("系统维护")) setAiComment(res.result);
       } catch (e) {}
@@ -98,54 +81,71 @@ export default function PhaseController() {
 
   return (
     <div className="space-y-10 pt-4 flex flex-col items-center">
-      <style jsx global>{`.range-thumb::-webkit-slider-thumb { border-color: ${theme.thumb} !important; border-width: 4px !important; }`}</style>
+      {/* 🛠️ 核心：滑块按钮变色 CSS */}
+      <style jsx global>{`
+        .range-thumb::-webkit-slider-thumb { 
+          border-color: ${energyTouched ? theme.thumb : '#cbd5e1'} !important; 
+          border-width: 4px !important;
+          background-color: white !important;
+          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1) !important;
+          transition: border-color 0.3s ease !important;
+        }
+      `}</style>
       
+      {/* 柱状展示区 */}
       <div className="flex justify-center items-end space-x-14 h-56 relative w-full px-12">
         <div className="flex flex-col items-center space-y-2 w-16">
-          <div className="relative w-full h-44 bg-slate-100 rounded-[28px] overflow-hidden border-2 border-slate-100 shadow-[inset_0_2px_8px_rgba(0,0,0,0.05)]">
+          <div className="relative w-full h-44 bg-slate-100 rounded-[28px] overflow-hidden border-2">
             <div className={`absolute bottom-0 w-full transition-all duration-500 ${theme.main}`} style={{ height: `${energy}%` }} />
           </div>
-          <div className="text-[10px] font-black font-mono text-slate-800">{Math.round(energy)}%</div>
+          <div className="text-[10px] font-black">{Math.round(energy)}%</div>
         </div>
 
         <div className={`flex flex-col items-center space-y-2 w-16 ${!energyTouched ? "opacity-30" : ""}`}>
           <div className="relative w-full h-44">
             <div className="absolute w-full h-full z-20 pointer-events-none">
               <div className="absolute w-full transition-all duration-500" style={{ bottom: `${recLinePercent}%` }}>
-                <div className={`absolute right-[-14px] transform translate-x-full -translate-y-1/2 text-white text-[9px] px-2 py-1 rounded-lg font-black shadow-lg ${theme.main}`}>
-                    {isDiscrete ? Math.round(recommendedTask) : recommendedTask.toFixed(1)} {unit}
+                <div className={`absolute right-[-14px] transform translate-x-full -translate-y-1/2 text-white text-[9px] px-2 py-1 rounded-lg font-black shadow-lg ${isMaxed ? 'bg-pink-600' : 'bg-[#007AFF]'}`}>
+                    {activeGoal.unitName === "小时" ? dynamicBase.toFixed(1) : Math.round(dynamicBase)} {activeGoal.unitName || "小时"}
                 </div>
                 <div className="w-full border-t-2 border-dashed border-slate-300 opacity-60" />
               </div>
             </div>
-            <div className="absolute inset-0 rounded-[28px] overflow-hidden bg-slate-100 border-2 border-slate-100 flex flex-col justify-end">
+            <div className="absolute inset-0 rounded-[28px] overflow-hidden bg-slate-100 border-2 flex flex-col justify-end">
               <div className={`w-full transition-all duration-500 ${theme.main}`} style={{ height: `${outputPercent}%` }} />
             </div>
           </div>
-          <div className="text-[10px] font-black font-mono text-slate-800">{isDiscrete ? Math.round(actualDone) : actualDone.toFixed(1)}</div>
+          <div className="text-[10px] font-black">{actualDone.toFixed(1)}</div>
         </div>
       </div>
 
-      <div className={`w-full max-w-xs p-6 rounded-[36px] border-2 border-b-4 transition-all duration-300 text-center mx-auto ${theme.bg}`}>
-        <p className={`text-xs font-bold leading-relaxed min-h-[40px] pt-2 ${theme.text}`}>
-          {aiComment && !hasUnsavedChanges ? aiComment : (energy === 50 && actualDone === 0 && !hasUnsavedChanges ? "准备出发：请滑动以上传今日进度" : "接纳波动：保持节奏，水滴石穿。")}
+      {/* 反馈面板 */}
+      <div className={`w-full max-w-xs p-6 rounded-[36px] border-2 border-b-4 transition-all text-center mx-auto ${isMaxed ? 'bg-pink-50 border-pink-100' : 'bg-white'}`}>
+        <p className={`text-xs font-bold leading-relaxed min-h-[40px] pt-2 ${isMaxed ? 'text-pink-600' : 'text-slate-600'}`}>
+          {aiComment && !hasUnsavedChanges ? aiComment : (energy === 50 && actualDone === 0 && !hasUnsavedChanges ? "准备出发：请滑动以上传今日进度" : "保持节奏，水滴石穿。")}
         </p>
       </div>
 
+      {/* 滑块交互区 */}
       <div className="w-full max-w-xs space-y-10">
         <div className="space-y-3">
-          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日能量状态</span><span className="text-[10px] font-bold text-slate-300">{Math.round(energy)}%</span></div>
-          <input type="range" min="0" max="100" step="1" value={energy} onChange={(e) => handleSliderChange("energy", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
+          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日能量状态</span></div>
+          <input type="range" min="0" max="100" step="1" value={energy} onChange={(e) => handleSliderChange("energy", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none shadow-sm transition-all" />
         </div>
         <div className={`space-y-3 transition-all ${!energyTouched ? "opacity-30 grayscale pointer-events-none" : "opacity-100"}`}>
-          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日完成情况</span><span className="text-[10px] font-bold text-slate-300">{isDiscrete ? Math.round(actualDone) : actualDone.toFixed(1)} {unit}</span></div>
-          <input type="range" min="0" max={safeMaxLimit} step={sliderStep} value={actualDone} disabled={!energyTouched} onChange={(e) => handleSliderChange("output", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
+          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日完成情况</span></div>
+          <input type="range" min="0" max={safeMaxLimit} step="0.01" value={actualDone} disabled={!energyTouched} onChange={(e) => handleSliderChange("output", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none shadow-sm transition-all" />
         </div>
       </div>
 
-      <button onClick={async () => { const p = getCurrentPhase(activeGoal.startDate); await addDailyLog({ energyLevel: energy, actualDone, date: getTodayKey(), phase: p, note: aiComment }); setIsSuccess(true); setHasUnsavedChanges(false); }} 
+      {/* 保存按钮 */}
+      <button onClick={async () => { 
+          const p = getCurrentPhase(activeGoal.startDate); 
+          await addDailyLog({ energy: energy, actualDone: actualDone, date: getTodayKey(), phase: p, aiFeedback: aiComment }); 
+          setIsSuccess(true); setHasUnsavedChanges(false); 
+        }} 
         disabled={isSuccess && !hasUnsavedChanges} 
-        className={`w-full max-w-sm py-5 rounded-[40px] font-black text-sm tracking-widest transition-all border-b-4 ${isSuccess && !hasUnsavedChanges ? "bg-slate-200 border-slate-300 text-slate-400" : theme.btn + " active:translate-y-1 shadow-md border-black/10"}`}>
+        className={`w-full max-w-sm py-5 rounded-[40px] font-black text-sm transition-all border-b-4 ${isSuccess && !hasUnsavedChanges ? "bg-slate-200 border-slate-300 text-slate-400" : theme.btn + " active:translate-y-1 shadow-md border-black/10"}`}>
         {isSuccess && !hasUnsavedChanges ? (isMaxed ? "✨ 巅峰达成" : "✅ 已保存") : "上传今日进度"}
       </button>
     </div>
