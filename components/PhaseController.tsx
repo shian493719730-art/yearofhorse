@@ -101,7 +101,7 @@ export default function PhaseController() {
     setSaveError("");
 
     const phase = getCurrentPhase(activeGoal.startDate);
-    const saved = await addDailyLog({
+    const result = await addDailyLog({
       energyLevel: energy,
       actualDone,
       date: getTodayKey(),
@@ -111,9 +111,9 @@ export default function PhaseController() {
 
     setIsSaving(false);
 
-    if (!saved) {
+    if (!result?.ok) {
       setIsSuccess(false);
-      setSaveError("保存失败，请重试");
+      setSaveError(result?.message || "保存失败，请重试");
       return;
     }
 
@@ -147,7 +147,23 @@ export default function PhaseController() {
 
   return (
     <div className="space-y-10 pt-4 flex flex-col items-center">
-      <style jsx global>{`.range-thumb::-webkit-slider-thumb { border-color: ${theme.thumb} !important; }`}</style>
+      <style jsx global>{`
+        .range-thumb {
+          accent-color: ${theme.thumb};
+        }
+
+        .range-thumb::-webkit-slider-thumb {
+          background-color: ${theme.thumb} !important;
+          border-color: ${theme.thumb} !important;
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.92);
+        }
+
+        .range-thumb::-moz-range-thumb {
+          background-color: ${theme.thumb} !important;
+          border-color: ${theme.thumb} !important;
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.92);
+        }
+      `}</style>
       
       <div className="flex justify-center items-end space-x-14 h-56 relative w-full px-12">
         <div className="flex flex-col items-center space-y-2 w-16">

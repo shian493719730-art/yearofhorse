@@ -108,9 +108,17 @@ export const getTodayLog = (goal: any) => {
 
 export const getCurrentPhase = (startDate: string) => {
   const days = getDaysActive(startDate);
-  if (days <= 3) return "适应期";
-  if (days <= 10) return "稳定期";
-  return "深水区";
+  if (days <= 3) return 1;
+  if (days <= 10) return 2;
+  return 3;
+};
+
+export const getPhaseLabel = (phase: unknown) => {
+  const phaseNum = Number(phase);
+  if (phaseNum === 1) return "适应期";
+  if (phaseNum === 2) return "稳定期";
+  if (phaseNum === 3) return "深水区";
+  return "记录中";
 };
 
 const safeNum = (val: any) => { const n = Number(val); return isNaN(n) ? 0 : n; };
@@ -215,6 +223,8 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
         const cleanLogs = (data.daily_logs || []).map((log: any) => ({
           ...log,
           date: normalizeDateKey(log.date),
+          phase: safeNum(log.phase),
+          phaseLabel: getPhaseLabel(log.phase),
           energyLevel: safeNum(log.energy),
           actualDone: safeNum(log.actual_done),
           note: String(log.ai_feedback || "")
@@ -281,7 +291,7 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
       goal_id: activeGoal.id,
       user_handle: currentUserKey,
       date: entryDate,
-      phase: log.phase,
+      phase: safeNum(log.phase),
       energy: safeNum(log.energyLevel),
       actual_done: safeNum(log.actualDone),
       ai_feedback: String(log.note || "")
@@ -291,8 +301,11 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
       ? await supabase.from('daily_logs').update(payload).eq('id', existingLog.id).eq('user_handle', currentUserKey)
       : await supabase.from('daily_logs').insert([payload]);
 
-    if (error) return false;
+    if (error) {
+      console.error("Save Error:", error.message);
+      return { ok: false, message: error.message || "保存失败，请重试" };
+    }
     await get().fetchLatestGoal(true);
-    return true;
+    return { ok: true };
   }
 }));
