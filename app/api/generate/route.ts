@@ -9,8 +9,21 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { type, payload } = body;
-    requestType = type;
+    let type = body?.type;
+    let payload = body?.payload;
+
+    if (!type && typeof body?.title === 'string' && typeof body?.energy !== 'undefined') {
+      type = "LIVE_COMMENT";
+      payload = { title: body.title, energy: body.energy };
+    } else if (!type && typeof body?.title === 'string' && typeof body?.days !== 'undefined') {
+      type = "GENERATE_METRICS";
+      payload = { title: body.title, days: body.days };
+    }
+
+    requestType = type || "";
+    if (!type || !payload) {
+      throw new Error("请求格式无效");
+    }
 
     // 2. 检查 API Key
     const apiKey = process.env.AI_API_KEY;

@@ -16,15 +16,20 @@ export default function PhaseController() {
   const [energyTouched, setEnergyTouched] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [aiComment, setAiComment] = useState("");
   const debounceTimer = useRef<any>(null);
 
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => () => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+  }, []);
 
   useEffect(() => {
     if (!todayLog) {
       if (!hasUnsavedChanges) {
-        setEnergy(50); setActualDone(0); setEnergyTouched(false); setAiComment(""); setIsSuccess(false);
+        setEnergy(50); setActualDone(0); setEnergyTouched(false); setAiComment(""); setIsSuccess(false); setSaveError("");
       }
       return;
     }
@@ -33,6 +38,7 @@ export default function PhaseController() {
     setEnergyTouched(true);
     setAiComment(todayLog.note || "");
     setHasUnsavedChanges(false);
+    setSaveError("");
     // ✨ 如果數據庫中今日已打卡，初始化即進入成功鎖定態
     setIsSuccess(true);
   }, [todayLog]);
@@ -66,6 +72,7 @@ export default function PhaseController() {
 
   const handleSliderChange = (type: "energy" | "output", value: number) => {
     setHasUnsavedChanges(true); 
+    setSaveError("");
     // ✨ 只要用戶移動滑塊，就解除鎖定狀態，重新顯示「確認今日狀態」
     setIsSuccess(false); 
     if (type === "energy") { setEnergy(value); setEnergyTouched(true); }
@@ -76,11 +83,41 @@ export default function PhaseController() {
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
-          body: JSON.stringify({ title: activeGoal.title, energy: type === "energy" ? value : energy })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: "LIVE_COMMENT",
+            payload: { title: activeGoal.title, energy: type === "energy" ? value : energy }
+          })
         }).then(r => r.json());
         if (res.result) setAiComment(res.result);
       } catch (e) {}
     }, 1200);
+  };
+
+  const handleSave = async () => {
+    if (isSaving) return;
+
+    setIsSaving(true);
+    setSaveError("");
+
+    const phase = getCurrentPhase(activeGoal.startDate);
+    const saved = await addDailyLog({
+      energyLevel: energy,
+      actualDone,
+      date: getTodayKey(),
+      phase,
+      note: aiComment
+    });
+
+    setIsSaving(false);
+
+    if (!saved) {
+      setIsSuccess(false);
+      setSaveError("保存失败，请重试");
+      return;
+    }
+
+    setIsSuccess(true);
   };
 
   const theme = (() => {
@@ -95,6 +132,8 @@ export default function PhaseController() {
   })();
 
   const getFeedbackText = () => {
+    if (saveError) return saveError;
+    if (isSaving) return "正在写入今日状态...";
     if (aiComment && !hasUnsavedChanges) return aiComment;
     if (energy === 50 && actualDone === 0 && !hasUnsavedChanges) return "准备出发：请滑动确认今日能量状态";
     if (isMaxed) return "完美共振：知行合一的巅峰境界。";
@@ -153,20 +192,22 @@ export default function PhaseController() {
       </div>
 
       {/* ✨ 移除 setTimeout，實現狀態鎖定 */}
-      <button onClick={() => { const p = getCurrentPhase(activeGoal.startDate); addDailyLog({ energyLevel: energy, actualDone, date: getTodayKey(), phase: p, note: aiComment }); setIsSuccess(true); }} 
-        disabled={isSuccess || !hasUnsavedChanges} 
+      <button onClick={handleSave} 
+        disabled={isSaving || isSuccess || !hasUnsavedChanges} 
         className={`w-full max-w-sm py-5 rounded-[40px] font-black text-sm tracking-widest transition-all border-b-4 ${
-          isSuccess 
+          isSaving || isSuccess 
             ? "cursor-default" 
             : "active:translate-y-1 active:border-b-0"
         } ${
-          isSuccess 
+          isSaving
+            ? "bg-slate-200 border-slate-300 text-slate-400 border-b-0 shadow-none"
+            : isSuccess 
             ? (isMaxed ? theme.btn + " border-pink-700/30 border-b-0 shadow-none" : "bg-slate-200 border-slate-300 text-slate-400 border-b-0 shadow-none") 
             : hasUnsavedChanges || isMaxed 
               ? theme.btn + " border-black/10 shadow-md" 
               : "bg-slate-200 border-slate-300 text-slate-400"
         }`}>
-        {isSuccess ? (isMaxed ? "恭喜" : "已保存") : "确认今日状态"}
+        {isSaving ? "保存中" : isSuccess ? (isMaxed ? "恭喜" : "已保存") : "确认今日状态"}
       </button>
     </div>
   );

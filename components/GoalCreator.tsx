@@ -19,8 +19,9 @@ export function GoalCreator() {
     setStep("THINKING");
 
     try {
-      const res = await fetch('/api/ai-feedback', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           type: "GENERATE_METRICS", 
           payload: { 
@@ -30,8 +31,7 @@ export function GoalCreator() {
         })
       });
       const data = await res.json();
-      const parsedOptions = JSON.parse(data.result);
-      setOptions(parsedOptions);
+      setOptions(Array.isArray(data) ? data : []);
       setStep("SELECT");
     } catch (e) {
       await createGoal(title, parseInt(days) || 30, "小时", 1); 

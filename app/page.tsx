@@ -9,13 +9,16 @@ export default function HomePage() {
   const { 
     activeGoal, isLoading, isRefetching, 
     fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal,
-    currentUser, login, initUser // 从 store 引入新功能
+    currentUser, login, initUser, savedHandleHint // 从 store 引入新功能
   } = store;
 
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<any>("dashboard");
   
   const [handleInput, setHandleInput] = useState(""); // 登录输入框
+  const [pinInput, setPinInput] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [goalInput, setGoalInput] = useState("");
   const [daysInput, setDaysInput] = useState("21");
   const [options, setOptions] = useState<any[]>([]);
@@ -33,6 +36,26 @@ export default function HomePage() {
     setMounted(true); 
     initUser(); // 先找我是谁
   }, [initUser]);
+
+  useEffect(() => {
+    if (savedHandleHint && !handleInput) setHandleInput(savedHandleHint);
+  }, [savedHandleHint, handleInput]);
+
+  const handleLogin = async () => {
+    if (!handleInput.trim() || !pinInput.trim() || isAuthenticating) return;
+
+    setAuthError("");
+    setIsAuthenticating(true);
+    const result = await login(handleInput, pinInput);
+    setIsAuthenticating(false);
+
+    if (!result?.ok) {
+      setAuthError(result?.message || "身份校验失败");
+      return;
+    }
+
+    setPinInput("");
+  };
   
   // 2. 状态机：控制什么时候该显示什么界面
   useEffect(() => { 
@@ -60,20 +83,31 @@ export default function HomePage() {
           <div className="space-y-4">
             <input 
               value={handleInput} 
-              onChange={(e) => setHandleInput(e.target.value)} 
+              onChange={(e) => { setHandleInput(e.target.value); setAuthError(""); }} 
               placeholder="例如：Neo_2026" 
               className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all" 
             />
+            <input
+              type="password"
+              value={pinInput}
+              onChange={(e) => { setPinInput(e.target.value); setAuthError(""); }}
+              placeholder="输入你的专属口令"
+              className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all"
+              onKeyDown={(e) => e.key === "Enter" && handleLogin()}
+            />
             <button 
-              onClick={() => handleInput && login(handleInput)} 
-              disabled={!handleInput}
+              onClick={handleLogin} 
+              disabled={!handleInput.trim() || !pinInput.trim() || isAuthenticating}
               className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 disabled:opacity-50 transition-all"
             >
-              进入系统
+              {isAuthenticating ? "验证中" : "进入系统"}
             </button>
           </div>
+          {authError ? (
+            <p className="text-[10px] text-center text-red-500 font-bold">{authError}</p>
+          ) : null}
           <p className="text-[9px] text-slate-400 text-center leading-relaxed px-6">
-            * 代号是你找回数据的唯一凭证。<br/>建议使用姓名拼音或只有你知道的唯一字符。
+            * 首次输入会自动创建身份；以后请使用同一代号和口令进入。<br/>口令至少 4 位，只保存在你自己的设备会话中。
           </p>
         </div>
       </main>
@@ -176,4 +210,4 @@ export default function HomePage() {
       </div>
     </main>
   );
-}o
+}
