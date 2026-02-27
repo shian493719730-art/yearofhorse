@@ -28,13 +28,12 @@ const safeNum = (val: any) => { const n = Number(val); return isNaN(n) ? 0 : n; 
 
 export const useGoalStore = create<any>((set: any, get: any) => ({
   activeGoal: null,
-  currentUser: null, // 新增：当前用户的代号
+  currentUser: null,
   isLoading: false,
   isRefetching: false,
   weeklyReport: null,
   dailyReport: null,
 
-  // 1. 初始化用户：从浏览器缓存读取代号
   initUser: () => {
     const saved = localStorage.getItem('philosopher_handle');
     if (saved) {
@@ -43,22 +42,16 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
     }
   },
 
-  // 2. 登录/注册逻辑：申领代号
   login: async (handle: string) => {
     if (!handle) return;
-    
-    // 检查代号是否存在
     const { data: profile } = await supabase.from('profiles').select('handle').eq('handle', handle).maybeSingle();
-    
     if (!profile) {
-      // 如果代号没人用，就帮他占个坑
       const { error: regError } = await supabase.from('profiles').insert([{ handle }]);
       if (regError) {
         alert("代号注册失败，可能已被占用");
         return;
       }
     }
-
     localStorage.setItem('philosopher_handle', handle);
     set({ currentUser: handle });
     get().fetchLatestGoal();
@@ -66,13 +59,11 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
 
   fetchLatestGoal: async (silent = false) => {
     const { currentUser } = get();
-    if (!currentUser) return; // 没登录不查数据
-
+    if (!currentUser) return;
     if (silent) set({ isRefetching: true });
     else set({ isLoading: true });
     
     try {
-      // ✨ 关键点：增加 .eq('user_handle', currentUser) 过滤，只看自己的目标
       const { data, error } = await supabase.from('goals')
         .select('*, daily_logs(*)')
         .eq('user_handle', currentUser)
@@ -108,15 +99,12 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
   createGoal: async (title: string, totalDays: number, unit: string, base: number) => {
     const { currentUser } = get();
     try {
-      // ✨ 关键点：只把属于当前用户的旧目标设为不活跃
       await supabase.from('goals').update({ is_active: false }).eq('user_handle', currentUser).eq('is_active', true);
-      
       const { error } = await supabase.from('goals').insert([{
         title, total_days: totalDays, unit_name: unit, base_task_value: base,
         start_date: new Date().toISOString(), is_active: true,
-        user_handle: currentUser // 注入身份
+        user_handle: currentUser
       }]);
-      
       if (error) return { ok: false };
       await get().fetchLatestGoal();
       return { ok: true };
@@ -126,7 +114,6 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
   updateGoal: async (title: string, totalDays: number) => {
     const { activeGoal, currentUser } = get();
     if (!activeGoal || !currentUser) return false;
-    // 增加 user_handle 校验
     const { error } = await supabase.from('goals').update({ title, total_days: totalDays }).eq('id', activeGoal.id).eq('user_handle', currentUser);
     if (error) return false;
     await get().fetchLatestGoal(true);
@@ -136,16 +123,27 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
   addDailyLog: async (log: any) => {
     const { activeGoal, currentUser } = get();
     if (!activeGoal || !currentUser) return false;
-    const { error } = await supabase.from('daily_logs').insert([{
+
+    // 映射：将代码中的驼峰键名 转换为 数据库中的下划线键名
+    const dbPayload = {
       goal_id: activeGoal.id, 
-      user_handle: currentUser, // 注入身份
+      user_handle: currentUser,
       date: log.date || getTodayKey(),
       phase: log.phase, 
-      energy: safeNum(log.energyLevel), 
-      actual_done: String(log.actualDone), 
-      ai_feedback: String(log.note || "")
-    }]);
-    if (error) return false;
+      energy: safeNum(log.energyLevel),       // 对应数据库列名 energy
+      actual_done: safeNum(log.actualDone),   // 对应数据库列名 actual_done
+      ai_feedback: String(log.note || "")     // 对应数据库列名 ai_feedback
+    };
+
+    // 使用 upsert 替代 insert，实现覆盖保存，解决 400 重复主键错误
+    const { error } = await supabase
+      .from('daily_logs')
+      .upsert([dbPayload], { onConflict: 'goal_id,user_handle,date' });
+
+    if (error) {
+      console.error("Save Error:", error.message);
+      return false;
+    }
     await get().fetchLatestGoal(true);
     return true;
   }
