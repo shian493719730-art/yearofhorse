@@ -28,10 +28,15 @@ export default function HomePage() {
   
   const [isCreating, setIsCreating] = useState(false);
 
+  // 🛠 修复点 1: 刷新后立刻抓取数据
   useEffect(() => { 
     setMounted(true); 
-    initUser(); 
-  }, [initUser]);
+    const loadData = async () => {
+      await initUser();
+      await fetchLatestGoal(); // 强制刷新数据
+    };
+    loadData();
+  }, [initUser, fetchLatestGoal]);
   
   useEffect(() => { 
     if (!isLoading && !isRefetching && currentUser) {
@@ -56,23 +61,10 @@ export default function HomePage() {
             <h1 className="text-2xl font-black tracking-tighter">申领你的代号</h1>
           </div>
           <div className="space-y-4">
-            <input 
-              value={handleInput} 
-              onChange={(e) => setHandleInput(e.target.value)} 
-              placeholder="例如：Neo_2026" 
-              className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all" 
-            />
-            <button 
-              onClick={() => handleInput && login(handleInput)} 
-              disabled={!handleInput}
-              className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 disabled:opacity-50 transition-all"
-            >
-              进入系统
-            </button>
+            <input value={handleInput} onChange={(e) => setHandleInput(e.target.value)} placeholder="例如：Neo_2026" className="w-full bg-slate-50 p-6 rounded-2xl font-bold text-center border-2 border-transparent focus:border-[#007AFF] outline-none transition-all" />
+            <button onClick={() => handleInput && login(handleInput)} disabled={!handleInput} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 disabled:opacity-50 transition-all">进入系统</button>
           </div>
-          <p className="text-[9px] text-slate-400 text-center leading-relaxed px-6">
-            * 代号是你找回数据的唯一凭证。<br/>建议使用姓名拼音或只有你知道的唯一字符。
-          </p>
+          <p className="text-[9px] text-slate-400 text-center leading-relaxed px-6">* 代号是你找回数据的唯一凭证。<br/>建议使用姓名拼音或只有你知道的唯一字符。</p>
         </div>
       </main>
     );
@@ -87,15 +79,11 @@ export default function HomePage() {
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
         <h1 className="text-2xl font-black text-center tracking-tighter">开启新旅程</h1>
-        {/* 修改 4: 上面一栏这个字改为”请输入目标“ */}
         <input value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="请输入目标" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center border-2 focus:border-[#007AFF] outline-none" />
-        
-        {/* 修改 3: 结尾处加一个单位“天” */}
         <div className="relative flex items-center">
           <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="计划天数" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center outline-none" />
           <span className="absolute right-6 font-black text-slate-400">天</span>
         </div>
-
         <button onClick={async () => { setIsCreating(true); setView("analyzing"); const ops = await aiAnalyzeGoal(goalInput); setOptions(ops); setView("options"); }} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs">下一步</button>
       </div>
     </main>
@@ -109,8 +97,7 @@ export default function HomePage() {
         <h2 className="text-2xl font-black tracking-tighter">选一个方向</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {options.map((opt: any) => (
-            <button key={opt.id} onClick={() => { setFinalUnit(opt.unit); setFinalBase(opt.base); setView("confirm"); }} 
-              className="group relative bg-white h-64 p-8 rounded-[40px] border-2 border-slate-100 border-b-8 hover:border-[#007AFF] active:translate-y-1 transition-all text-center flex flex-col justify-between shadow-sm">
+            <button key={opt.id} onClick={() => { setFinalUnit(opt.unit); setFinalBase(opt.base); setView("confirm"); }} className="group relative bg-white h-64 p-8 rounded-[40px] border-2 border-slate-100 border-b-8 hover:border-[#007AFF] active:translate-y-1 transition-all text-center flex flex-col justify-between shadow-sm">
               <div className="absolute top-6 left-6 font-black text-[10px] text-slate-300 uppercase">{opt.label}</div>
               <div className="flex-1 flex flex-col justify-center items-center">
                 <div className="text-5xl font-black text-slate-900 tracking-tighter">{opt.base}</div>
@@ -140,7 +127,7 @@ export default function HomePage() {
   // 🏁 场景 F：主看板
   const daysActive = getDaysActive(activeGoal?.startDate);
   
-  // 修改 2: 字体缩放计算逻辑
+  // 🛠 修复点 2: 标题字号缩放逻辑
   const getTitleFontSize = (text: string = "") => {
     if (text.length > 15) return "text-base";
     if (text.length > 10) return "text-lg";
@@ -150,28 +137,23 @@ export default function HomePage() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white rounded-[44px] shadow-xl flex flex-col border-b-8 border-slate-200 min-h-[720px] overflow-hidden">
-        
         <header className="px-10 py-10 border-b-2 border-slate-50 relative flex justify-between items-start">
           <div className="flex flex-col text-left max-w-[65%]">
             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">当前目标</span>
             {isEditing ? (
               <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="text-xl font-black border-b-2 border-[#007AFF] outline-none pb-1 mt-1 bg-transparent w-full" />
             ) : (
-              /* 修改 2: 动态字号应用 */
               <h1 className={`${getTitleFontSize(activeGoal?.title)} font-black tracking-tighter mt-1 transition-all duration-300`}>
                 {activeGoal?.title}
               </h1>
             )}
             <div className="flex space-x-4 items-center mt-2">
-              <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase hover:underline">
-                {isEditing ? "保存" : "修改"}
-              </button>
+              <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase hover:underline">{isEditing ? "保存" : "修改"}</button>
               <span className="text-[9px] font-black text-slate-300 uppercase">用户: {currentUser}</span>
             </div>
           </div>
           
           <div className="flex flex-col text-right items-end min-w-[30%]">
-            {/* 修改 2: 完成进度改为目标天数 */}
             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">目标天数</span>
             {isEditing ? (
               <div className="flex items-center justify-end space-x-2 mt-1">
@@ -183,7 +165,6 @@ export default function HomePage() {
             )}
           </div>
         </header>
-
         <div className="flex-1 px-8 pb-12 overflow-y-auto"><PhaseController /></div>
       </div>
     </main>

@@ -21,20 +21,16 @@ export default function PhaseController() {
 
   useEffect(() => { setMounted(true); }, []);
 
+  // 🛠 修复点 3: 解决刷新后状态丢失。只有当 todayLog 真的存在时才同步
   useEffect(() => {
-    if (!todayLog) {
-      if (!hasUnsavedChanges) {
-        setEnergy(50); setActualDone(0); setEnergyTouched(false); setAiComment(""); setIsSuccess(false);
-      }
-      return;
+    if (todayLog) {
+      setEnergy(todayLog.energyLevel || 50);
+      setActualDone(todayLog.actualDone || 0);
+      setEnergyTouched(true);
+      setAiComment(todayLog.note || "");
+      setHasUnsavedChanges(false);
+      setIsSuccess(true);
     }
-    setEnergy(todayLog.energyLevel);
-    setActualDone(todayLog.actualDone || 0);
-    setEnergyTouched(true);
-    setAiComment(todayLog.note || "");
-    setHasUnsavedChanges(false);
-    // ✨ 如果數據庫中今日已打卡，初始化即進入成功鎖定態
-    setIsSuccess(true);
   }, [todayLog]);
 
   const unit = activeGoal?.unitName || "单位";
@@ -42,7 +38,7 @@ export default function PhaseController() {
   const dailyBase = activeGoal?.dailyBase || 4;
   
   const safeMaxLimit = isDiscrete ? Math.ceil(dailyBase * MAX_MULT) : dailyBase * MAX_MULT;
-  const sliderStep = isDiscrete ? 1 : 0.1;
+  const sliderStep = isDiscrete ? 1 : 0.01; // 调细精度，方便拉满
 
   const calculateRecommended = (e: number) => {
     if (e <= 50) return dailyBase * Math.pow(e / 50, 2.5);
@@ -58,7 +54,8 @@ export default function PhaseController() {
   const outputPercent = clamp((actualDone / safeMaxLimit) * 100, 0, 100);
   const recLinePercent = clamp((clampedRec / safeMaxLimit) * 100, 0, 100);
 
-  const isMaxed = energy >= 100 && actualDone >= safeMaxLimit;
+  // 🛠 修复点 4: 炫彩门槛改为 95%
+  const isMaxed = energy >= 95 && actualDone >= (safeMaxLimit * 0.95);
   const isGolden = !isMaxed && energy > 80 && actualDone >= clampedRec;
   const isResilient = energy < 50 && actualDone >= clampedRec * 0.85;
 
@@ -66,7 +63,6 @@ export default function PhaseController() {
 
   const handleSliderChange = (type: "energy" | "output", value: number) => {
     setHasUnsavedChanges(true); 
-    // ✨ 只要用戶移動滑塊，就解除鎖定狀態，重新顯示「確認今日狀態」
     setIsSuccess(false); 
     if (type === "energy") { setEnergy(value); setEnergyTouched(true); }
     else { setActualDone(value); }
@@ -87,7 +83,7 @@ export default function PhaseController() {
     if (isMaxed) return { 
       main: "bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-pink-500 via-red-500 to-yellow-500 animate-pulse", 
       bg: "bg-pink-50 border-pink-100", text: "text-pink-600", bubble: "bg-pink-600", thumb: "#ec4899",
-      btn: "bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-pink-500 via-red-500 to-yellow-500 text-white animate-pulse"
+      btn: "bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-pink-500 via-red-500 to-yellow-500 text-white"
     };
     if (isGolden) return { main: "bg-yellow-400 shadow-lg", bg: "bg-yellow-50 border-yellow-100", text: "text-yellow-800", bubble: "bg-yellow-500", thumb: "#facc15", btn: "bg-yellow-400 text-white" };
     if (isResilient) return { main: "bg-indigo-500 shadow-md", bg: "bg-indigo-50", text: "text-indigo-700", bubble: "bg-indigo-600", thumb: "#4f46e5", btn: "bg-indigo-500 text-white" };
@@ -96,19 +92,19 @@ export default function PhaseController() {
 
   const getFeedbackText = () => {
     if (aiComment && !hasUnsavedChanges) return aiComment;
-    if (energy === 50 && actualDone === 0 && !hasUnsavedChanges) return "准备出发：请滑动确认今日能量状态";
+    if (energy === 50 && actualDone === 0 && !hasUnsavedChanges) return "准备出发：请滑动以上传今日进度";
     if (isMaxed) return "完美共振：知行合一的巅峰境界。";
     if (isGolden) return "状态极佳：能量与意志的高度统一。";
     if (isResilient) return "韧性生长：在逆境中守住了基准。";
-    if (energy < 50 && !isResilient) return "接纳低谷：今天辛苦了，系統已降低負荷，早點休息。";
-    if (energy >= 50 && actualDone >= clampedRec) return "稳定积累：保持这种节奏，水滴石穿。";
-    if (energy >= 50 && actualDone < clampedRec) return "接纳波动：能量虽足但产出未滿？沒關係，波動也是能力。";
+    if (energy < 50 && !isResilient) return "接纳低谷：今天辛苦了，系统已降低负荷，早点休息。";
+    if (energy >= 50 && actualDone >= (clampedRec * 0.95)) return "稳定积累：保持这种节奏，水滴石穿。";
+    if (energy >= 50 && actualDone < clampedRec) return "接纳波动：能量虽足但产出未满？没关系，波动也是能力。";
     return "记录中";
   };
 
   return (
     <div className="space-y-10 pt-4 flex flex-col items-center">
-      <style jsx global>{`.range-thumb::-webkit-slider-thumb { border-color: ${theme.thumb} !important; }`}</style>
+      <style jsx global>{`.range-thumb::-webkit-slider-thumb { border-color: ${theme.thumb} !important; border-width: 4px !important; }`}</style>
       
       <div className="flex justify-center items-end space-x-14 h-56 relative w-full px-12">
         <div className="flex flex-col items-center space-y-2 w-16">
@@ -136,7 +132,6 @@ export default function PhaseController() {
         </div>
       </div>
 
-      {/* 反饋面板：寬度與滑塊對齊，字體下移 */}
       <div className={`w-full max-w-xs p-6 rounded-[36px] border-2 border-b-4 transition-all duration-300 text-center mx-auto ${theme.bg}`}>
         <p className={`text-xs font-bold leading-relaxed min-h-[40px] pt-2 ${theme.text}`}>{getFeedbackText()}</p>
       </div>
@@ -144,29 +139,23 @@ export default function PhaseController() {
       <div className="w-full max-w-xs space-y-10">
         <div className="space-y-3">
           <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日能量状态</span><span className="text-[10px] font-bold text-slate-300">{Math.round(energy)}%</span></div>
-          <input type="range" min="0" max="100" value={energy} onChange={(e) => handleSliderChange("energy", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
+          <input type="range" min="0" max="100" step="1" value={energy} onChange={(e) => handleSliderChange("energy", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
         </div>
         <div className={`space-y-3 transition-all ${!energyTouched ? "opacity-30 grayscale pointer-events-none" : "opacity-100"}`}>
-          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日完成情况</span><span className="text-[10px] font-bold text-slate-300">{isDiscrete ? Math.round(actualDone) : actualDone} {unit}</span></div>
+          {/* 🛠 修复点 5: 文案替换 */}
+          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日完成情况</span><span className="text-[10px] font-bold text-slate-300">{isDiscrete ? Math.round(actualDone) : Number(actualDone).toFixed(1)} {unit}</span></div>
           <input type="range" min="0" max={safeMaxLimit} step={sliderStep} value={actualDone} disabled={!energyTouched} onChange={(e) => handleSliderChange("output", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
         </div>
       </div>
 
-      {/* ✨ 移除 setTimeout，實現狀態鎖定 */}
-      <button onClick={() => { const p = getCurrentPhase(activeGoal.startDate); addDailyLog({ energyLevel: energy, actualDone, date: getTodayKey(), phase: p, note: aiComment }); setIsSuccess(true); }} 
-        disabled={isSuccess || !hasUnsavedChanges} 
+      <button onClick={() => { const p = getCurrentPhase(activeGoal.startDate); addDailyLog({ energyLevel: energy, actualDone, date: getTodayKey(), phase: p, note: aiComment }); setIsSuccess(true); setHasUnsavedChanges(false); }} 
+        disabled={isSuccess && !hasUnsavedChanges} 
         className={`w-full max-w-sm py-5 rounded-[40px] font-black text-sm tracking-widest transition-all border-b-4 ${
-          isSuccess 
-            ? "cursor-default" 
-            : "active:translate-y-1 active:border-b-0"
-        } ${
-          isSuccess 
-            ? (isMaxed ? theme.btn + " border-pink-700/30 border-b-0 shadow-none" : "bg-slate-200 border-slate-300 text-slate-400 border-b-0 shadow-none") 
-            : hasUnsavedChanges || isMaxed 
-              ? theme.btn + " border-black/10 shadow-md" 
-              : "bg-slate-200 border-slate-300 text-slate-400"
+          isSuccess && !hasUnsavedChanges
+            ? "cursor-default bg-slate-200 border-slate-300 text-slate-400" 
+            : theme.btn + " active:translate-y-1 active:border-b-0 border-black/10 shadow-md"
         }`}>
-        {isSuccess ? (isMaxed ? "恭喜" : "已保存") : "确认"}
+        {isSuccess && !hasUnsavedChanges ? (isMaxed ? "✨ 巅峰达成" : "✅ 已保存") : "上传今日进度"}
       </button>
     </div>
   );
