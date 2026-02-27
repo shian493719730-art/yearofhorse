@@ -147,7 +147,7 @@ export default function PhaseController() {
           <input type="range" min="0" max="100" value={energy} onChange={(e) => handleSliderChange("energy", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
         </div>
         <div className={`space-y-3 transition-all ${!energyTouched ? "opacity-30 grayscale pointer-events-none" : "opacity-100"}`}>
-          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">实际产出进度</span><span className="text-[10px] font-bold text-slate-300">{isDiscrete ? Math.round(actualDone) : actualDone} {unit}</span></div>
+          <div className="flex justify-between px-1"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">今日完成情况</span><span className="text-[10px] font-bold text-slate-300">{isDiscrete ? Math.round(actualDone) : actualDone} {unit}</span></div>
           <input type="range" min="0" max={safeMaxLimit} step={sliderStep} value={actualDone} disabled={!energyTouched} onChange={(e) => handleSliderChange("output", Number(e.target.value))} className="range-thumb w-full h-6 bg-slate-100 rounded-full appearance-none border-2 border-slate-200 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 transition-all shadow-sm" />
         </div>
       </div>
@@ -166,7 +166,7 @@ export default function PhaseController() {
               ? theme.btn + " border-black/10 shadow-md" 
               : "bg-slate-200 border-slate-300 text-slate-400"
         }`}>
-        {isSuccess ? (isMaxed ? "恭喜" : "已保存") : "确认今日状态"}
+        {isSuccess ? (isMaxed ? "恭喜" : "已保存") : "确认"}
       </button>
     </div>
   );

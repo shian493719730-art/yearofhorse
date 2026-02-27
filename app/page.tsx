@@ -9,13 +9,13 @@ export default function HomePage() {
   const { 
     activeGoal, isLoading, isRefetching, 
     fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal,
-    currentUser, login, initUser // 从 store 引入新功能
+    currentUser, login, initUser 
   } = store;
 
   const [mounted, setMounted] = useState(false);
   const [view, setView] = useState<any>("dashboard");
   
-  const [handleInput, setHandleInput] = useState(""); // 登录输入框
+  const [handleInput, setHandleInput] = useState("");
   const [goalInput, setGoalInput] = useState("");
   const [daysInput, setDaysInput] = useState("21");
   const [options, setOptions] = useState<any[]>([]);
@@ -28,13 +28,11 @@ export default function HomePage() {
   
   const [isCreating, setIsCreating] = useState(false);
 
-  // 1. 初始化用户身份
   useEffect(() => { 
     setMounted(true); 
-    initUser(); // 先找我是谁
+    initUser(); 
   }, [initUser]);
   
-  // 2. 状态机：控制什么时候该显示什么界面
   useEffect(() => { 
     if (!isLoading && !isRefetching && currentUser) {
       if (!activeGoal && !isCreating && view === "dashboard") setView("input");
@@ -48,7 +46,7 @@ export default function HomePage() {
 
   if (!mounted) return <div className="min-h-screen bg-[#F5F5F7]" />;
 
-  // 🚪 场景 A：身份申领（登录页）
+  // 🚪 场景 A：身份申领
   if (!currentUser) {
     return (
       <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
@@ -80,7 +78,6 @@ export default function HomePage() {
     );
   }
 
-  // 加载中状态（已登录但在抓取数据）
   if (isLoading && !activeGoal && !isCreating) {
     return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400">加载逻辑中...</main>;
   }
@@ -90,17 +87,22 @@ export default function HomePage() {
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
         <h1 className="text-2xl font-black text-center tracking-tighter">开启新旅程</h1>
-        <input value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="你想坚持什么？" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center border-2 focus:border-[#007AFF] outline-none" />
-        <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="计划天数" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center outline-none" />
+        {/* 修改 4: 上面一栏这个字改为”请输入目标“ */}
+        <input value={goalInput} onChange={(e) => setGoalInput(e.target.value)} placeholder="请输入目标" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center border-2 focus:border-[#007AFF] outline-none" />
+        
+        {/* 修改 3: 结尾处加一个单位“天” */}
+        <div className="relative flex items-center">
+          <input type="number" value={daysInput} onChange={(e) => setDaysInput(e.target.value)} placeholder="计划天数" className="w-full bg-slate-50 p-5 rounded-2xl font-bold text-center outline-none" />
+          <span className="absolute right-6 font-black text-slate-400">天</span>
+        </div>
+
         <button onClick={async () => { setIsCreating(true); setView("analyzing"); const ops = await aiAnalyzeGoal(goalInput); setOptions(ops); setView("options"); }} className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs">下一步</button>
       </div>
     </main>
   );
 
-  // 场景 C：分析中
   if (view === "analyzing") return <main className="min-h-screen flex items-center justify-center font-black animate-pulse text-slate-400 font-mono">逻辑解构中...</main>;
 
-  // 场景 D：选项分歧
   if (view === "options") return (
     <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800 text-center">
       <div className="w-full max-w-3xl space-y-10">
@@ -122,7 +124,6 @@ export default function HomePage() {
     </main>
   );
 
-  // 场景 E：最终确认
   if (view === "confirm") return (
     <main className="min-h-screen flex items-center justify-center p-6 font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-lg border-b-8 border-slate-200 space-y-6">
@@ -138,6 +139,14 @@ export default function HomePage() {
 
   // 🏁 场景 F：主看板
   const daysActive = getDaysActive(activeGoal?.startDate);
+  
+  // 修改 2: 字体缩放计算逻辑
+  const getTitleFontSize = (text: string = "") => {
+    if (text.length > 15) return "text-base";
+    if (text.length > 10) return "text-lg";
+    return "text-2xl";
+  };
+
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white rounded-[44px] shadow-xl flex flex-col border-b-8 border-slate-200 min-h-[720px] overflow-hidden">
@@ -146,21 +155,24 @@ export default function HomePage() {
           <div className="flex flex-col text-left max-w-[65%]">
             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">当前目标</span>
             {isEditing ? (
-              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="text-2xl font-black border-b-2 border-[#007AFF] outline-none pb-1 mt-1 bg-transparent w-full" />
+              <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="text-xl font-black border-b-2 border-[#007AFF] outline-none pb-1 mt-1 bg-transparent w-full" />
             ) : (
-              <h1 className="text-2xl font-black tracking-tighter mt-1 truncate">{activeGoal?.title}</h1>
+              /* 修改 2: 动态字号应用 */
+              <h1 className={`${getTitleFontSize(activeGoal?.title)} font-black tracking-tighter mt-1 transition-all duration-300`}>
+                {activeGoal?.title}
+              </h1>
             )}
             <div className="flex space-x-4 items-center mt-2">
               <button onClick={() => { if(isEditing) updateGoal(editTitle, Number(editDays)); setIsEditing(!isEditing); }} className="text-[9px] font-black text-[#007AFF] uppercase hover:underline">
                 {isEditing ? "保存" : "修改"}
               </button>
-              {/* 显示当前身份，增加归属感 */}
               <span className="text-[9px] font-black text-slate-300 uppercase">用户: {currentUser}</span>
             </div>
           </div>
           
           <div className="flex flex-col text-right items-end min-w-[30%]">
-            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">完成进度</span>
+            {/* 修改 2: 完成进度改为目标天数 */}
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">目标天数</span>
             {isEditing ? (
               <div className="flex items-center justify-end space-x-2 mt-1">
                 <span className="text-xs font-bold text-slate-400">总:</span>
