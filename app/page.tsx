@@ -8,7 +8,8 @@ export default function HomePage() {
   const store = useGoalStore();
   const { 
     activeGoal, isLoading, isRefetching, 
-    fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal, completeActiveGoal,
+    fetchLatestGoal, fetchArchivedGoals, createGoal, updateGoal, aiAnalyzeGoal, completeActiveGoal,
+    archivedGoals, isArchiveLoading,
     currentUser, login, initUser, savedHandleHint // 从 store 引入新功能
   } = store;
 
@@ -31,10 +32,12 @@ export default function HomePage() {
   
   const [isCreating, setIsCreating] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isArchiveOpen, setIsArchiveOpen] = useState(false);
 
   const daysActive = getDaysActive(activeGoal?.startDate);
   const totalDays = Number(activeGoal?.totalDays || 0);
   const isGoalFinished = Boolean(activeGoal && totalDays > 0 && daysActive > totalDays);
+  const formatDate = (value: string) => value ? value.slice(0, 10).replace(/-/g, ".") : "--";
 
   // 1. 初始化用户身份
   useEffect(() => { 
@@ -45,6 +48,10 @@ export default function HomePage() {
   useEffect(() => {
     if (savedHandleHint && !handleInput) setHandleInput(savedHandleHint);
   }, [savedHandleHint, handleInput]);
+
+  useEffect(() => {
+    if (view !== "dashboard") setIsArchiveOpen(false);
+  }, [view]);
 
   const handleLogin = async () => {
     if (!handleInput.trim() || !pinInput.trim() || isAuthenticating) return;
@@ -287,6 +294,52 @@ export default function HomePage() {
             ) : (
               <div className="inline-block px-3 py-1 bg-slate-100 rounded-full text-[10px] font-black text-slate-500 mt-2">第 {daysActive} / {activeGoal?.totalDays} 天</div>
             )}
+            <div className="relative mt-3">
+              <button
+                onClick={async () => {
+                  const next = !isArchiveOpen;
+                  setIsArchiveOpen(next);
+                  if (next) await fetchArchivedGoals();
+                }}
+                className="text-[9px] font-black text-slate-400 uppercase tracking-widest hover:text-[#007AFF] transition-colors"
+              >
+                归档记录
+              </button>
+
+              {isArchiveOpen ? (
+                <div className="absolute right-0 top-full mt-3 w-72 rounded-[24px] bg-white border-2 border-slate-100 border-b-4 border-slate-200 shadow-xl p-4 space-y-3 z-30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Archive</span>
+                    <button
+                      onClick={() => setIsArchiveOpen(false)}
+                      className="text-[10px] font-black text-slate-400 hover:text-slate-600"
+                    >
+                      收起
+                    </button>
+                  </div>
+
+                  {isArchiveLoading ? (
+                    <p className="text-[10px] text-slate-400 font-bold py-4 text-center">加载归档中...</p>
+                  ) : archivedGoals?.length ? (
+                    <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+                      {archivedGoals.map((goal: any) => (
+                        <div key={goal.id} className="rounded-2xl bg-slate-50 border-2 border-slate-100 p-3 text-left">
+                          <p className="text-xs font-black text-slate-700 truncate">{goal.title}</p>
+                          <p className="text-[9px] font-bold text-slate-400 mt-1">
+                            {formatDate(goal.start_date)} · {goal.total_days}天 · 打卡{goal.daysLogged}天
+                          </p>
+                          <p className="text-[9px] font-bold text-slate-500 mt-1">
+                            累计 {goal.outputTotal} {goal.unit_name} · 平均能量 {goal.avgEnergy}%
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 font-bold py-4 text-center">还没有归档目标</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </header>
 

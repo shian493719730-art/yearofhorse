@@ -128,6 +128,8 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
   currentUser: null, // 新增：当前用户的代号
   currentUserKey: null,
   savedHandleHint: "",
+  archivedGoals: [],
+  isArchiveLoading: false,
   isLoading: false,
   isRefetching: false,
   weeklyReport: null,
@@ -236,6 +238,57 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
       }
     } catch (e) {}
     set({ isLoading: false, isRefetching: false });
+  },
+
+  fetchArchivedGoals: async () => {
+    const { currentUserKey } = get();
+    if (!currentUserKey) {
+      set({ archivedGoals: [] });
+      return [];
+    }
+
+    set({ isArchiveLoading: true });
+    try {
+      const { data, error } = await supabase
+        .from('goals')
+        .select('id, title, total_days, unit_name, start_date, created_at, daily_logs(actual_done, energy, date)')
+        .eq('user_handle', currentUserKey)
+        .eq('is_active', false)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error || !data) {
+        set({ archivedGoals: [] });
+        return [];
+      }
+
+      const normalized = data.map((goal: any) => {
+        const logs = (goal.daily_logs || []).map((log: any) => ({
+          ...log,
+          date: normalizeDateKey(log.date),
+          actualDone: safeNum(log.actual_done),
+          energyLevel: safeNum(log.energy)
+        }));
+        const outputTotal = logs.reduce((sum: number, log: any) => sum + log.actualDone, 0);
+        const avgEnergy = logs.length ? Math.round(logs.reduce((sum: number, log: any) => sum + log.energyLevel, 0) / logs.length) : 0;
+
+        return {
+          ...goal,
+          logs,
+          outputTotal: Number(outputTotal.toFixed(1)),
+          avgEnergy,
+          daysLogged: logs.length
+        };
+      });
+
+      set({ archivedGoals: normalized });
+      return normalized;
+    } catch (e) {
+      set({ archivedGoals: [] });
+      return [];
+    } finally {
+      set({ isArchiveLoading: false });
+    }
   },
 
   aiAnalyzeGoal: async (title: string) => {
