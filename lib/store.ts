@@ -4,9 +4,40 @@ import { supabase } from './supabase';
 const SESSION_STORAGE_KEY = 'philosopher_session';
 const LEGACY_HANDLE_STORAGE_KEY = 'philosopher_handle';
 const HANDLE_SEPARATOR = '::';
+const APP_TIME_ZONE = 'Asia/Shanghai';
 
 const pad2 = (value: number) => String(value).padStart(2, '0');
-const formatLocalDate = (date: Date) => `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const getDatePartsInTimeZone = (date: Date, timeZone: string) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  if (!year || !month || !day) return null;
+  return { year: Number(year), month: Number(month), day: Number(day) };
+};
+
+const formatDateKeyInTimeZone = (date: Date, timeZone = APP_TIME_ZONE) => {
+  const parts = getDatePartsInTimeZone(date, timeZone);
+  if (!parts) return '';
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+};
+
+const dateKeyToDayIndex = (dateKey: string) => {
+  const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return NaN;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  return Math.floor(Date.UTC(year, month - 1, day) / (1000 * 60 * 60 * 24));
+};
+
 const normalizeHandle = (value: string) => value.trim();
 const normalizePin = (value: string) => value.trim();
 
@@ -17,9 +48,12 @@ type SessionPayload = {
 
 export const normalizeDateKey = (value: unknown) => {
   if (!value) return '';
-  if (value instanceof Date) return formatLocalDate(value);
+  if (value instanceof Date) return formatDateKeyInTimeZone(value, APP_TIME_ZONE);
 
   const raw = String(value).trim();
+  const exactMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (exactMatch) return `${exactMatch[1]}-${exactMatch[2]}-${exactMatch[3]}`;
+
   const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
 
@@ -27,7 +61,7 @@ export const normalizeDateKey = (value: unknown) => {
   if (localeMatch) return `${localeMatch[1]}-${pad2(Number(localeMatch[2]))}-${pad2(Number(localeMatch[3]))}`;
 
   const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) return formatLocalDate(parsed);
+  if (!Number.isNaN(parsed.getTime())) return formatDateKeyInTimeZone(parsed, APP_TIME_ZONE);
 
   return raw;
 };
@@ -90,14 +124,16 @@ const migrateLegacyHandle = async (legacyHandle: string, secureHandle: string) =
   return false;
 };
 
-export const getTodayKey = () => formatLocalDate(new Date());
+export const getTodayKey = () => formatDateKeyInTimeZone(new Date(), APP_TIME_ZONE);
 
 export const getDaysActive = (startDate: string) => {
   if (!startDate) return 0;
-  const start = new Date(startDate);
-  const now = new Date();
-  const diffTime = Math.abs(now.getTime() - start.getTime());
-  return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  const startKey = normalizeDateKey(startDate);
+  const todayKey = getTodayKey();
+  const startIndex = dateKeyToDayIndex(startKey);
+  const todayIndex = dateKeyToDayIndex(todayKey);
+  if (Number.isNaN(startIndex) || Number.isNaN(todayIndex)) return 0;
+  return Math.max(1, todayIndex - startIndex + 1);
 };
 
 export const getTodayLog = (goal: any) => {
