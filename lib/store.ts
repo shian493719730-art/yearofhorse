@@ -307,5 +307,21 @@ export const useGoalStore = create<any>((set: any, get: any) => ({
     }
     await get().fetchLatestGoal(true);
     return { ok: true };
+  },
+
+  completeActiveGoal: async () => {
+    const { activeGoal, currentUserKey } = get();
+    if (!activeGoal || !currentUserKey) return { ok: false, message: "当前没有可结算目标" };
+
+    const { error } = await supabase
+      .from('goals')
+      .update({ is_active: false })
+      .eq('id', activeGoal.id)
+      .eq('user_handle', currentUserKey);
+
+    if (error) return { ok: false, message: error.message || "结算失败，请稍后重试" };
+
+    await get().fetchLatestGoal(true);
+    return { ok: true };
   }
 }));

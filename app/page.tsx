@@ -8,7 +8,7 @@ export default function HomePage() {
   const store = useGoalStore();
   const { 
     activeGoal, isLoading, isRefetching, 
-    fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal,
+    fetchLatestGoal, createGoal, updateGoal, aiAnalyzeGoal, completeActiveGoal,
     currentUser, login, initUser, savedHandleHint // 从 store 引入新功能
   } = store;
 
@@ -30,6 +30,11 @@ export default function HomePage() {
   const [editDays, setEditDays] = useState("");
   
   const [isCreating, setIsCreating] = useState(false);
+  const [isCompleting, setIsCompleting] = useState(false);
+
+  const daysActive = getDaysActive(activeGoal?.startDate);
+  const totalDays = Number(activeGoal?.totalDays || 0);
+  const isGoalFinished = Boolean(activeGoal && totalDays > 0 && daysActive > totalDays);
 
   // 1. 初始化用户身份
   useEffect(() => { 
@@ -61,13 +66,14 @@ export default function HomePage() {
   useEffect(() => { 
     if (!isLoading && !isRefetching && currentUser) {
       if (!activeGoal && !isCreating && view === "dashboard") setView("input");
-      if (activeGoal && !isCreating && view !== "dashboard") setView("dashboard");
+      if (activeGoal && isGoalFinished && !isCreating && view !== "settlement") setView("settlement");
+      if (activeGoal && !isGoalFinished && !isCreating && view !== "dashboard") setView("dashboard");
       if (activeGoal) { 
         setEditTitle(activeGoal.title); 
         setEditDays(String(activeGoal.totalDays)); 
       }
     }
-  }, [activeGoal, isLoading, isRefetching, view, isCreating, currentUser]);
+  }, [activeGoal, isLoading, isRefetching, view, isCreating, currentUser, isGoalFinished]);
 
   if (!mounted) return <div className="min-h-screen bg-[#F5F5F7]" />;
 
@@ -173,8 +179,83 @@ export default function HomePage() {
     </main>
   );
 
+  // 场景 F：任务结算
+  if (view === "settlement" && activeGoal) {
+    const logs = activeGoal.logs || [];
+    const outputTotal = logs.reduce((sum: number, log: any) => sum + Number(log.actualDone || 0), 0);
+    const avgEnergy = logs.length ? Math.round(logs.reduce((sum: number, log: any) => sum + Number(log.energyLevel || 0), 0) / logs.length) : 0;
+    const daysOverdue = Math.max(0, daysActive - totalDays);
+    const summaryTag = avgEnergy >= 80 ? "高能完赛" : avgEnergy >= 50 ? "稳定完赛" : "韧性完赛";
+    const summaryText = daysOverdue > 0
+      ? `超出计划 ${daysOverdue} 天仍坚持到底，节奏掌控力很强。`
+      : "在计划周期内完成目标，执行力非常稳定。";
+
+    const handleStartNextGoal = async () => {
+      if (isCompleting) return;
+      setIsCompleting(true);
+      const result = await completeActiveGoal();
+      setIsCompleting(false);
+
+      if (!result?.ok) {
+        alert(result?.message || "结算失败，请稍后重试");
+        return;
+      }
+
+      setGoalInput("");
+      setDaysInput("21");
+      setOptions([]);
+      setFinalUnit("");
+      setFinalBase(4);
+      setIsCreating(false);
+      setView("input");
+    };
+
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6 bg-[#F5F5F7] font-mono text-slate-800">
+        <div className="w-full max-w-lg bg-white p-10 rounded-[44px] shadow-xl border-b-8 border-slate-200 space-y-8">
+          <div className="text-center space-y-3">
+            <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.2em]">Run complete</span>
+            <h1 className="text-3xl font-black tracking-tighter">任务已结算</h1>
+            <p className="text-xs font-bold text-slate-400">{activeGoal.title} · {summaryTag}</p>
+          </div>
+
+          <div className="rounded-[34px] border-2 border-slate-100 bg-slate-50/80 p-7 space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">计划周期</span>
+              <span className="font-black text-slate-700">{totalDays} 天</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">实际投入</span>
+              <span className="font-black text-slate-700">{daysActive} 天</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">累计产出</span>
+              <span className="font-black text-slate-700">{Number(outputTotal.toFixed(1))} {activeGoal.unitName}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">平均能量</span>
+              <span className="font-black text-slate-700">{avgEnergy}%</span>
+            </div>
+          </div>
+
+          <div className="rounded-[30px] bg-gradient-to-br from-slate-50 to-blue-50 border-2 border-slate-100 p-6 text-center">
+            <p className="text-sm font-black text-slate-700 leading-relaxed">{summaryText}</p>
+          </div>
+
+          <button
+            onClick={handleStartNextGoal}
+            disabled={isCompleting}
+            className="w-full py-5 bg-[#007AFF] text-white rounded-2xl font-black border-b-4 border-blue-800 tracking-widest uppercase text-xs active:translate-y-1 disabled:opacity-60 transition-all"
+          >
+            {isCompleting ? "结算中" : "归档并开启新目标"}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   // 🏁 场景 F：主看板
-  const daysActive = getDaysActive(activeGoal?.startDate);
+  // 当目标到期后，状态机会自动切到 settlement 视图
   return (
     <main className="min-h-screen flex items-center justify-center bg-[#F5F5F7] p-4 font-mono text-slate-800">
       <div className="w-full max-w-lg bg-white rounded-[44px] shadow-xl flex flex-col border-b-8 border-slate-200 min-h-[720px] overflow-hidden">
