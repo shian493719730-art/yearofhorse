@@ -44,7 +44,7 @@ export async function POST(req: Request) {
     // 2. 检查 API Key
     const apiKey = process.env.AI_API_KEY;
     if (!apiKey) {
-      throw new Error("Vercel后台未配置 AI_API_KEY"); // 这里的报错会直接显示在卡片上
+      throw new Error("部署平台未配置 AI_API_KEY"); // 这里的报错会直接显示在卡片上
     }
 
     const apiUrl = "https://api.deepseek.com/chat/completions";
